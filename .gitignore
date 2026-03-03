@@ -1,9 +1,33 @@
+# Python
+backend/venv/
+backend/.venv/
 .venv/
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment / secrets
+backend/.env
 .env
-.env.*
+
+# Uploads & generated files
+backend/uploads/
+backend/reports/
+
+# Node / React
+frontend/node_modules/
+frontend/build/
+frontend/.env.local
+frontend/.env.production
+
+# VS Code
+.vscode/
+
+# OS
 .DS_Store
-*.sqlite3
+Thumbs.db
