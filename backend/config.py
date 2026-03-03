@@ -11,6 +11,7 @@ class Settings(BaseSettings):
 	UPLOAD_DIR: str = "./uploads"
 	MAX_AUDIO_MB: int = 50
 	ASSEMBLYAI_API_KEY: str = ""
+	FRONTEND_URL: str = "http://localhost:3000"
 
 	class Config:
 		env_file = ".env"

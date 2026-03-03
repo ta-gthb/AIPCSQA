@@ -240,3 +240,92 @@ AIPCSQA/
 ## License
 
 This project is for educational and demonstration purposes.
+
+---
+
+## Deployment Guide (Vercel + Render + Neon)
+
+> **Architecture:** Frontend → **Vercel** (free) | Backend → **Render** (free) | Database → **Neon** (free PostgreSQL)
+>
+> The backend cannot run on Vercel because it uses WebSockets (Live Monitor), background tasks (AI audit queue), and file uploads — none of which are supported by Vercel serverless functions.
+
+---
+
+### Step 1 — Free PostgreSQL on Neon
+
+1. Sign up at **https://neon.tech** (free tier)
+2. Create a new project → create a database named `auditai`
+3. Go to **Dashboard → Connection Details** → copy the **connection string**  
+   It will look like: `postgresql://user:pass@ep-xxx.neon.tech/auditai`
+4. **Change the driver prefix** from `postgresql://` to `postgresql+asyncpg://`  
+   Final format: `postgresql+asyncpg://user:pass@ep-xxx.neon.tech/auditai?ssl=require`
+
+---
+
+### Step 2 — Deploy Backend on Render
+
+1. Sign up at **https://render.com** (free tier)
+2. Click **New → Web Service** → connect your GitHub account → select the `AIPCSQA` repo
+3. Set these values:
+   - **Root Directory:** `backend`
+   - **Runtime:** `Python 3`
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
+4. Under **Environment Variables**, add:
+
+   | Key | Value |
+   |---|---|
+   | `DATABASE_URL` | Your Neon connection string (`postgresql+asyncpg://...?ssl=require`) |
+   | `SECRET_KEY` | Any long random string |
+   | `OPENAI_API_KEY` | Your Groq API key |
+   | `OPENAI_BASE_URL` | `https://api.groq.com/openai/v1` |
+   | `ASSEMBLYAI_API_KEY` | Your AssemblyAI key |
+   | `REPORT_DIR` | `./reports` |
+   | `MAX_AUDIO_MB` | `50` |
+   | `FRONTEND_URL` | *(leave blank for now — fill in after Step 3)* |
+
+5. Click **Deploy** — wait for it to go live. You'll get a URL like `https://aipcsqa-backend.onrender.com`
+
+---
+
+### Step 3 — Deploy Frontend on Vercel
+
+1. Sign up at **https://vercel.com** (free tier)
+2. Click **Add New → Project** → import the `AIPCSQA` GitHub repo
+3. Vercel will auto-detect the `vercel.json` — just set this **Environment Variable**:
+
+   | Key | Value |
+   |---|---|
+   | `REACT_APP_API_URL` | Your Render backend URL, e.g. `https://aipcsqa-backend.onrender.com` |
+
+4. Click **Deploy** — you'll get a URL like `https://aipcsqa.vercel.app`
+
+---
+
+### Step 4 — Connect frontend URL to backend CORS
+
+1. Go back to **Render → Environment** for your backend service
+2. Set `FRONTEND_URL` = your Vercel URL (e.g. `https://aipcsqa.vercel.app`)
+3. Click **Save Changes** — Render will redeploy automatically
+
+---
+
+### Step 5 — Done
+
+Open your Vercel URL. The default supervisor login is:
+
+| Field | Value |
+|---|---|
+| **Email** | `supervisor@aipcsqa.com` |
+| **Password** | `supervisor@123` |
+
+> Change the password immediately after first login.
+
+---
+
+### Deployment Notes
+
+- **Render free tier** spins down after 15 minutes of inactivity. The first request after sleep takes ~30 seconds to wake up. Upgrade to a paid plan to avoid this.
+- **File uploads** are stored on Render's ephemeral disk — they are lost on redeploy. For production, configure an S3-compatible bucket (AWS S3, Cloudflare R2, Backblaze B2) and update the upload path logic.
+- **Neon free tier** provides 0.5 GB storage and 190 compute hours/month — sufficient for a demo/project.
+

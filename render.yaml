@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: aipcsqa-backend
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # Set manually in Render dashboard
+      - key: SECRET_KEY
+        generateValue: true  # Render auto-generates a secure value
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: ASSEMBLYAI_API_KEY
+        sync: false
+      - key: REPORT_DIR
+        value: ./reports
+      - key: MAX_AUDIO_MB
+        value: "50"
+      - key: FRONTEND_URL
+        sync: false          # Set to your Vercel URL, e.g. https://aipcsqa.vercel.app

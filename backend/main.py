@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
+from config import settings
 
 from models import user, agent, call, transcript, audit, violation, report, message  # noqa
 
@@ -12,9 +13,12 @@ app = FastAPI(
 	version="1.0.0",
 )
 
+# Allow localhost for dev + the deployed Vercel frontend URL
+_allowed_origins = list({"http://localhost:3000", settings.FRONTEND_URL})
+
 app.add_middleware(
 	CORSMiddleware,
-	allow_origins=["http://localhost:3000", "https://your-frontend.com"],
+	allow_origins=_allowed_origins,
 	allow_credentials=True,
 	allow_methods=["*"],
 	allow_headers=["*"],
