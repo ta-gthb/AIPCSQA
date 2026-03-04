@@ -136,7 +136,7 @@ function Login({ onLogin }) {
 function SupervisorNav({ screen, setScreen, name, onLogout }) {
   const isMobile = useMobile();
   const [menuOpen, setMenuOpen] = useState(false);
-  const items = [["📊","Dashboard"],["👥","Agents"],["🔍","Audit"],["🛡️","Compliance"],["📋","Reports"],["📡","Live Monitor"]];
+  const items = [["📊","Dashboard"],["👥","Agents"],["🔍","Audit"],["🛡️","Compliance"],["📋","Reports"],["📡","Live Monitor"],["👤","Profile"]];
   if (isMobile) {
     return (
       <nav style={{ position: "sticky", top: 0, zIndex: 100, background: t.surface + "f0", backdropFilter: "blur(12px)", borderBottom: `1px solid ${t.border}` }}>
@@ -956,6 +956,85 @@ function SupervisorMessages() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Supervisor Profile ──────────────────────────────────────────
+function SupervisorProfile({ user }) {
+  const [oldPwd, setOldPwd]   = useState("");
+  const [newPwd, setNewPwd]   = useState("");
+  const [newPwd2, setNewPwd2] = useState("");
+  const [pwdMsg, setPwdMsg]   = useState("");
+  const [pwdBusy, setPwdBusy] = useState(false);
+
+  const changePassword = async () => {
+    setPwdMsg("");
+    if (!oldPwd || !newPwd || !newPwd2) { setPwdMsg("Please fill all fields."); return; }
+    if (newPwd !== newPwd2) { setPwdMsg("New passwords do not match."); return; }
+    if (newPwd.length < 6)  { setPwdMsg("Password must be at least 6 characters."); return; }
+    setPwdBusy(true);
+    try {
+      await authExtra.changePassword(oldPwd, newPwd);
+      setPwdMsg("✅ Password changed successfully.");
+      setOldPwd(""); setNewPwd(""); setNewPwd2("");
+    } catch (e) {
+      setPwdMsg(e.response?.data?.detail || "Password change failed.");
+    } finally { setPwdBusy(false); }
+  };
+
+  const fields = user ? [
+    { label: "Full Name",     value: user.name,                                              icon: "👤" },
+    { label: "Email Address", value: user.email,                                             icon: "📧" },
+    { label: "Role",          value: user.role,                                              icon: "🛡️", highlight: true },
+    { label: "Team",          value: user.team || "—",                                       icon: "👥" },
+  ] : [];
+
+  return (
+    <div style={{ padding: 24, maxWidth: 680 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>👤 My Profile</h1>
+      <p style={{ color: t.muted, fontSize: 13, marginBottom: 24 }}>Your account details and security settings</p>
+
+      {/* Avatar + name card */}
+      <div style={{ ...S.card, display: "flex", alignItems: "center", gap: 20, marginBottom: 20, background: t.purple + "12", border: `1px solid ${t.purple}33` }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: t.purple + "33", border: `2px solid ${t.purple}66`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 800, color: t.purple }}>{user?.name?.[0]?.toUpperCase()}</div>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 20 }}>{user?.name}</div>
+          <div style={{ color: t.muted, fontSize: 13 }}>{user?.email}</div>
+          <div style={{ marginTop: 6, display: "flex", gap: 8 }}>
+            <Tag label="SUPERVISOR" color={t.purple} />
+            {user?.team && <Tag label={user.team} color={t.amber} />}
+          </div>
+        </div>
+      </div>
+
+      {/* Detail fields */}
+      <div style={{ ...S.card, marginBottom: 20 }}>
+        <div style={S.sec}>Account Details</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+          {fields.map((f) => (
+            <div key={f.label} style={{ padding: "14px 0", borderBottom: `1px solid ${t.border}`, paddingRight: 16 }}>
+              <div style={{ color: t.muted, fontSize: 11, fontWeight: 700, letterSpacing: 1.2, marginBottom: 4 }}>{f.icon} {f.label.toUpperCase()}</div>
+              <div style={{ fontSize: 14, fontWeight: f.highlight ? 800 : 500, color: f.highlight ? t.purple : t.text }}>{f.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Change Password */}
+      <div style={S.card}>
+        <div style={S.sec}>🔒 Change Password</div>
+        <label style={S.label}>CURRENT PASSWORD</label>
+        <input style={{ ...S.input, marginBottom: 12 }} type="password" value={oldPwd} onChange={e => setOldPwd(e.target.value)} placeholder="Current password" />
+        <label style={S.label}>NEW PASSWORD</label>
+        <input style={{ ...S.input, marginBottom: 12 }} type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="New password (min 6 chars)" />
+        <label style={S.label}>CONFIRM NEW PASSWORD</label>
+        <input style={{ ...S.input, marginBottom: 16 }} type="password" value={newPwd2} onChange={e => setNewPwd2(e.target.value)} placeholder="Repeat new password" />
+        {pwdMsg && <div style={{ fontSize: 13, marginBottom: 12, color: pwdMsg.startsWith("✅") ? t.green : t.red }}>{pwdMsg}</div>}
+        <button style={{ ...S.btn }} onClick={changePassword} disabled={pwdBusy}>
+          {pwdBusy ? "Updating..." : "Update Password"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -2345,6 +2424,8 @@ export default function App() {
       "Compliance":   <SupervisorCompliance />,
       "Reports":      <SupervisorReports />,
       "Live Monitor": <SupervisorLiveMonitor />,
+      "Profile":      <SupervisorProfile user={user} />,
+      "Profile":      <SupervisorProfile user={user} />,
     };
     return (
       <div style={S.page}>
