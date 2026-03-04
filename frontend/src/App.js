@@ -1,6 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { auth, dashboard, agents, transcripts, compliance, reports, live, authExtra, simulation } from "./api";
 
+// ── RESPONSIVE HOOK ──────────────────────────────────────────────
+function useMobile() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, []);
+  return isMobile;
+}
+
 // ── THEME ────────────────────────────────────────────────────────
 const t = {
   bg: "#0A0E1A", surface: "#111827", surface2: "#162032",
@@ -39,6 +50,7 @@ function Bar({ value, max = 10, color }) {
 //  LOGIN
 // ════════════════════════════════════════════════════════════════
 function Login({ onLogin }) {
+  const isMobile = useMobile();
   const [email, setEmail] = useState("");
   const [pass,  setPass]  = useState("");
   const [role,  setRole]  = useState("supervisor");
@@ -70,9 +82,9 @@ function Login({ onLogin }) {
   };
 
   return (
-    <div style={{ ...S.page, display: "flex" }}>
-      {/* Left panel */}
-      <div style={{ width: "42%", background: "linear-gradient(135deg,#0A0E1A,#0F1E35)", padding: 60, display: "flex", flexDirection: "column", justifyContent: "center", borderRight: `1px solid ${t.border}` }}>
+    <div style={{ ...S.page, display: "flex", flexDirection: isMobile ? "column" : "row" }}>
+      {/* Left panel – hidden on mobile */}
+      {!isMobile && <div style={{ width: "42%", background: "linear-gradient(135deg,#0A0E1A,#0F1E35)", padding: 60, display: "flex", flexDirection: "column", justifyContent: "center", borderRight: `1px solid ${t.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 48 }}>
           <div style={{ width: 44, height: 44, background: t.amber, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🎧</div>
           <span style={{ fontSize: 24, fontWeight: 800 }}>AIPCSQA</span>
@@ -89,9 +101,9 @@ function Login({ onLogin }) {
             <span style={{ color: t.muted, fontSize: 13 }}>{l}</span>
           </div>
         ))}
-      </div>
+      </div>}
       {/* Right panel */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 60 }}>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "40px 24px" : 60 }}>
         <div style={{ width: "100%", maxWidth: 400 }}>
           <h3 style={{ fontSize: 26, fontWeight: 800, marginBottom: 6 }}>Welcome back</h3>
           <p style={{ color: t.muted, fontSize: 14, marginBottom: 32 }}>Sign in to your dashboard</p>
@@ -122,7 +134,35 @@ function Login({ onLogin }) {
 //  SUPERVISOR LAYOUT + SCREENS
 // ════════════════════════════════════════════════════════════════
 function SupervisorNav({ screen, setScreen, name, onLogout }) {
-  const items = [["📊","Dashboard"],["👥","Agents"],["�","Audit"],["🛡️","Compliance"],["📋","Reports"],["📡","Live Monitor"]];
+  const isMobile = useMobile();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const items = [["📊","Dashboard"],["👥","Agents"],["🔍","Audit"],["🛡️","Compliance"],["📋","Reports"],["📡","Live Monitor"]];
+  if (isMobile) {
+    return (
+      <nav style={{ position: "sticky", top: 0, zIndex: 100, background: t.surface + "f0", backdropFilter: "blur(12px)", borderBottom: `1px solid ${t.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 30, height: 30, background: t.amber, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center" }}>🎧</div>
+            <span style={{ fontWeight: 800, fontSize: 16 }}>AIPCSQA</span>
+          </div>
+          <button onClick={() => setMenuOpen(o => !o)} style={{ background: "transparent", border: `1px solid ${t.border}`, borderRadius: 6, color: t.text, fontSize: 18, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }}>{menuOpen ? "✕" : "☰"}</button>
+        </div>
+        {menuOpen && (
+          <div style={{ background: t.surface, borderTop: `1px solid ${t.border}` }}>
+            {items.map(([icon, label]) => (
+              <button key={label} onClick={() => { setScreen(label); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "14px 20px", background: screen === label ? t.amber + "18" : "transparent", border: "none", borderLeft: screen === label ? `3px solid ${t.amber}` : "3px solid transparent", color: screen === label ? t.amber : t.text, fontWeight: screen === label ? 700 : 400, fontSize: 14, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                {icon} {label}
+              </button>
+            ))}
+            <div style={{ padding: "12px 20px", borderTop: `1px solid ${t.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ color: t.muted, fontSize: 13 }}>👋 {name}</span>
+              <button onClick={onLogout} style={{ ...S.ghost, fontSize: 12 }}>Logout</button>
+            </div>
+          </div>
+        )}
+      </nav>
+    );
+  }
   return (
     <nav style={{ position: "sticky", top: 0, zIndex: 100, background: t.surface + "f0", backdropFilter: "blur(12px)", borderBottom: `1px solid ${t.border}`, padding: "0 24px", display: "flex", alignItems: "center" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 32, paddingRight: 32, borderRight: `1px solid ${t.border}` }}>
@@ -143,8 +183,10 @@ function SupervisorNav({ screen, setScreen, name, onLogout }) {
   );
 }
 
+
 // ── Supervisor Dashboard ─────────────────────────────────────────
 function SupervisorDashboard() {
+  const isMobile = useMobile();
   const [kpis,    setKpis]    = useState(null);
   const [leaders, setLeaders] = useState([]);
   const [feed,    setFeed]    = useState([]);
@@ -170,7 +212,7 @@ function SupervisorDashboard() {
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>Supervisor Dashboard</h1>
         <p style={{ color: t.muted, fontSize: 13 }}>Real-time overview of your team's quality metrics</p>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
         {cards.map(k => (
           <div key={k.label} style={S.card}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -182,7 +224,7 @@ function SupervisorDashboard() {
         ))}
         {!kpis && [1,2,3,4].map(i => <div key={i} style={{ ...S.card, height: 100 }}><div style={{ color: t.muted, fontSize: 13 }}>Loading...</div></div>)}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
         <div style={S.card}>
           <div style={S.sec}>Agent Leaderboard</div>
           {leaders.length === 0 && <div style={{ color: t.muted, fontSize: 13 }}>No agents yet — register agents via API</div>}
@@ -229,6 +271,7 @@ function SupervisorDashboard() {
 
 // ── Supervisor Agents ────────────────────────────────────────────
 function SupervisorAgents() {
+  const isMobile = useMobile();
   const [agentsTab, setAgentsTab] = useState("agents"); // "agents" | "messages"
   const [unreadCount, setUnreadCount] = useState(0);
   const [list,    setList]    = useState([]);
@@ -346,7 +389,7 @@ function SupervisorAgents() {
       )}
       <input style={{ ...S.input, maxWidth: 340, marginBottom: 24 }} placeholder="🔍 Search by name or email..." value={search} onChange={e => setSearch(e.target.value)} />
       {loading && <div style={{ color: t.muted }}>Loading...</div>}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3,1fr)", gap: 16 }}>
         {list.map(a => (
           <div key={a.id} style={S.card}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
@@ -1075,7 +1118,35 @@ function AgentContactSupervisor() {
 }
 
 function AgentNav({ screen, setScreen, name, onLogout }) {
+  const isMobile = useMobile();
+  const [menuOpen, setMenuOpen] = useState(false);
   const items = [["🏠","My Dashboard"],["💬","Live Chat"],["🎙️","Voice Call"],["📤","Upload Recording"],["📊","My Performance"],["📩","Contact Supervisor"],["👤","Profile"]];
+  if (isMobile) {
+    return (
+      <nav style={{ position: "sticky", top: 0, zIndex: 100, background: t.surface + "f0", backdropFilter: "blur(12px)", borderBottom: `1px solid ${t.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 30, height: 30, background: t.green, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center" }}>🎧</div>
+            <span style={{ fontWeight: 800, fontSize: 16 }}>AIPCSQA</span>
+          </div>
+          <button onClick={() => setMenuOpen(o => !o)} style={{ background: "transparent", border: `1px solid ${t.border}`, borderRadius: 6, color: t.text, fontSize: 18, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }}>{menuOpen ? "✕" : "☰"}</button>
+        </div>
+        {menuOpen && (
+          <div style={{ background: t.surface, borderTop: `1px solid ${t.border}` }}>
+            {items.map(([icon, label]) => (
+              <button key={label} onClick={() => { setScreen(label); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "14px 20px", background: screen === label ? t.green + "18" : "transparent", border: "none", borderLeft: screen === label ? `3px solid ${t.green}` : "3px solid transparent", color: screen === label ? t.green : t.text, fontWeight: screen === label ? 700 : 400, fontSize: 14, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                {icon} {label}
+              </button>
+            ))}
+            <div style={{ padding: "12px 20px", borderTop: `1px solid ${t.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ color: t.muted, fontSize: 13 }}>👋 {name}</span>
+              <button onClick={onLogout} style={{ ...S.ghost, fontSize: 12 }}>Logout</button>
+            </div>
+          </div>
+        )}
+      </nav>
+    );
+  }
   return (
     <nav style={{ position: "sticky", top: 0, zIndex: 100, background: t.surface + "f0", backdropFilter: "blur(12px)", borderBottom: `1px solid ${t.border}`, padding: "0 24px", display: "flex", alignItems: "center" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 32, paddingRight: 32, borderRight: `1px solid ${t.border}` }}>
@@ -1096,8 +1167,10 @@ function AgentNav({ screen, setScreen, name, onLogout }) {
   );
 }
 
+
 // ── Agent Dashboard ──────────────────────────────────────────────
 function AgentDashboard({ name, setScreen: setScreenProp }) {
+  const isMobile = useMobile();
   const [agentId, setAgentId] = useState("Loading...");
   const quickOptions = [
     { icon: "💬", title: "Live Chat", desc: "Start or join a live text chat session with a customer. Your conversation will be AI-audited in real-time.", color: t.blue, screen: "Live Chat" },
@@ -1119,7 +1192,7 @@ function AgentDashboard({ name, setScreen: setScreenProp }) {
         <p style={{ color: t.muted, fontSize: 13 }}>Here's what you can do today</p>
         <div style={{ marginTop: 10, color: t.green, fontSize: 13, fontWeight: 700 }}>Your Agent ID: <span style={{ background: t.surface2, padding: "2px 8px", borderRadius: 6 }}>{agentId}</span></div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 20, maxWidth: 800 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2,1fr)", gap: 20, maxWidth: 800 }}>
         {quickOptions.map(card => (
           <div key={card.title} style={{ ...S.card, cursor: "pointer", transition: "all 0.2s", border: `1px solid ${card.color}33` }}
             onClick={() => setScreenProp && setScreenProp(card.screen)}
@@ -1639,6 +1712,7 @@ function AgentUploadRecording() {
 
 // ── Agent My Performance ─────────────────────────────────────────
 function AgentPerformance() {
+  const isMobile = useMobile();
   const [tab,            setTab]            = useState("overview");
   const [myTranscripts,  setMyTranscripts]  = useState([]);
   const [myReports,      setMyReports]      = useState([]);
@@ -1942,7 +2016,7 @@ function AgentPerformance() {
       {/* ── OVERVIEW ─────────────────────────────────── */}
       {tab === "overview" && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
             {[
               { label: "Total Calls",   value: myTranscripts.length, color: t.blue },
               { label: "Audited",       value: audited.length,       color: t.purple },
@@ -1955,7 +2029,7 @@ function AgentPerformance() {
               </div>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
             <div style={S.card}>
               <div style={S.sec}>AI Improvement Tips</div>
               {[

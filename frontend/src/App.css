@@ -36,3 +36,25 @@
     transform: rotate(360deg);
   }
 }
+
+/* ── MOBILE RESPONSIVE OVERRIDES ────────────────────────────── */
+@media (max-width: 767px) {
+  /* Make all tables horizontally scrollable */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  /* Prevent any element from overflowing viewport */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Fix input widths on mobile */
+  input, textarea, select {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
