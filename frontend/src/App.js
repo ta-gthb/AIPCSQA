@@ -2425,7 +2425,6 @@ export default function App() {
       "Reports":      <SupervisorReports />,
       "Live Monitor": <SupervisorLiveMonitor />,
       "Profile":      <SupervisorProfile user={user} />,
-      "Profile":      <SupervisorProfile user={user} />,
     };
     return (
       <div style={S.page}>
