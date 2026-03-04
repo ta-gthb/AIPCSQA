@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { auth, dashboard, agents, transcripts, compliance, reports, live, authExtra, simulation } from "./api";
 
 // ── THEME ────────────────────────────────────────────────────────
@@ -1713,7 +1713,6 @@ function AgentPerformance() {
         score >= 70 ? "#3B82F6" :
         score >= 60 ? "#F59E0B" :
         "#EF4444";
-      const status = perf.status || (score >= 70 ? "PASS" : "FAIL");
       const dimRows = Object.entries(dims).map(([k, v]) => {
         const pct = typeof v === "number" && v <= 10 ? Math.round(v * 10) : Math.round(v);
         const col = scoreColor(typeof v === "number" && v <= 10 ? v * 10 : v);
@@ -1917,7 +1916,7 @@ function AgentPerformance() {
     <span>Printed ${new Date().toLocaleDateString()}</span>
   </div>
 </div>
-<script>window.onload = () => { window.print(); }<\/script>
+<script>window.onload = () => { window.print(); }</script>
 </body></html>`;
 
     const win = window.open("", "_blank", "width=900,height=700");
