@@ -13,13 +13,11 @@ app = FastAPI(
 	version="1.0.0",
 )
 
-# Allow localhost for dev + the deployed Vercel frontend URL
-_allowed_origins = list({"http://localhost:3000", settings.FRONTEND_URL})
-
+# Allow all origins (Bearer token auth - no cookies involved)
 app.add_middleware(
 	CORSMiddleware,
-	allow_origins=_allowed_origins,
-	allow_credentials=True,
+	allow_origins=["*"],
+	allow_credentials=False,
 	allow_methods=["*"],
 	allow_headers=["*"],
 )
