@@ -177,6 +177,7 @@ async def upload_recording(
 		channel="upload",
 		status=CallStatus.processing,
 		started_at=datetime.datetime.utcnow(),
+		audio_path=saved_name,
 	)
 	db.add(call)
 	await db.flush()
@@ -199,6 +200,34 @@ async def upload_recording(
 		"transcribed": transcript_error is None,
 		"turns": len(turns),
 	}
+
+@router.post("/{call_id}/audio", status_code=200)
+async def attach_call_audio(
+	call_id: str,
+	file:    UploadFile   = File(...),
+	db:      AsyncSession = Depends(get_db),
+	_:       User         = Depends(current_user),
+):
+	"""Attach a recorded audio blob to an existing call."""
+	try:
+		call_uuid = uuid.UUID(call_id)
+	except ValueError:
+		raise HTTPException(400, "Invalid call_id")
+	call = await db.get(Call, call_uuid)
+	if not call:
+		raise HTTPException(404, "Call not found")
+
+	contents = await file.read()
+	os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+	ext = os.path.splitext(file.filename or "recording.webm")[1].lower() or ".webm"
+	saved_name = f"{uuid.uuid4()}{ext}"
+	saved_path = os.path.join(settings.UPLOAD_DIR, saved_name)
+	with open(saved_path, "wb") as fh:
+		fh.write(contents)
+
+	call.audio_path = saved_name
+	await db.commit()
+	return {"audio_filename": saved_name}
 
 @router.post("/ingest", status_code=202)
 async def ingest_transcript(body: TranscriptIn, bg: BackgroundTasks,
@@ -260,7 +289,8 @@ async def get_transcript(call_id: str, db: AsyncSession = Depends(get_db),
 	return {
 		"call": {"ref": call.call_ref, "channel": call.channel,
 				 "duration": call.duration_sec, "status": call.status,
-				 "sentiment": call.sentiment, "created_at": call.created_at.isoformat()},
+				 "sentiment": call.sentiment, "created_at": call.created_at.isoformat(),
+				 "audio_filename": call.audio_path},
 		"transcript": {"turns": transcript.turns if transcript else []},
 		"audit": {
 			"overall_score": audit.overall_score,

@@ -52,11 +52,16 @@ export const authExtra = {
 };
 
 export const transcripts = {
-  ingest:           (data)     => api.post("/transcripts/ingest", data),
-  upload:           (formData) => api.post("/transcripts/upload", formData, { headers: { "Content-Type": "multipart/form-data" } }),
-  list:             (params)   => api.get("/transcripts/", { params }),
-  get:              (id)       => api.get(`/transcripts/${id}`),
-  resolveViolation: (id)       => api.patch(`/transcripts/violations/${id}/resolve`),
+  ingest:           (data)           => api.post("/transcripts/ingest", data),
+  upload:           (formData)       => api.post("/transcripts/upload", formData, { headers: { "Content-Type": "multipart/form-data" } }),
+  attachAudio:      (callId, blob)   => {
+    const fd = new FormData();
+    fd.append("file", blob, "recording.webm");
+    return api.post(`/transcripts/${callId}/audio`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
+  list:             (params)         => api.get("/transcripts/", { params }),
+  get:              (id)             => api.get(`/transcripts/${id}`),
+  resolveViolation: (id)             => api.patch(`/transcripts/violations/${id}/resolve`),
 };
 
 export const compliance = {

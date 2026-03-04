@@ -539,6 +539,16 @@ function SupervisorAudit() {
           {/* Transcript viewer */}
           <div style={{ ...S.card, padding: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, fontWeight: 700 }}>{detail ? detail.call.ref : "Select a call"}</div>
+            {detail?.call?.audio_filename && (
+              <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
+                <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>RECORDING</div>
+                <audio
+                  controls
+                  src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
+                  style={{ width: "100%", height: 36 }}
+                />
+              </div>
+            )}
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
               {detail?.transcript?.turns?.map((turn, i) => {
                 const viol = detail.violations?.find(v => v.turn_index === i);
@@ -1404,6 +1414,9 @@ function AgentVoiceCall() {
   const sessionRef     = useRef(null);
   const isActiveRef    = useRef(false);
   const isMutedRef     = useRef(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef   = useRef([]);
+  const micStreamRef     = useRef(null);
 
   useEffect(() => {
     agents.me().then(r => setAgentInfo(r.data)).catch(() => {});
@@ -1414,6 +1427,8 @@ function AgentVoiceCall() {
     clearInterval(timerRef.current);
     try { recognitionRef.current?.abort(); } catch {}
     window.speechSynthesis?.cancel();
+    try { if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop(); } catch {}
+    micStreamRef.current?.getTracks().forEach(tr => tr.stop());
   }, []);
 
   const fmt = s => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
@@ -1472,6 +1487,19 @@ function AgentVoiceCall() {
       setDuration(0);
       timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
       isActiveRef.current = true;
+
+      // Start mic recording
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = stream;
+        audioChunksRef.current = [];
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : (MediaRecorder.isTypeSupported("audio/ogg") ? "audio/ogg" : "");
+        const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        mr.ondataavailable = e => { if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data); };
+        mr.start(1000);
+        mediaRecorderRef.current = mr;
+      } catch { /* mic unavailable — continue without recording */ }
+
       const opening = r.data.opening_message;
       historyRef.current = [{ role: "customer", text: opening }];
       setTranscript([{ role: "customer", text: opening, time: now() }]);
@@ -1494,9 +1522,28 @@ function AgentVoiceCall() {
     window.speechSynthesis.cancel();
     clearInterval(timerRef.current);
     setCallState("ending"); setStatusMsg("⏳ Submitting for audit...");
+
+    // Stop mic recording and collect blob before uploading
+    let recordingBlob = null;
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== "inactive") {
+      recordingBlob = await new Promise(resolve => {
+        mr.onstop = () => {
+          const chunks = audioChunksRef.current;
+          resolve(chunks.length > 0 ? new Blob(chunks, { type: chunks[0].type || "audio/webm" }) : null);
+        };
+        mr.stop();
+      });
+    }
+    micStreamRef.current?.getTracks().forEach(tr => tr.stop());
+
     try {
       const turns = historyRef.current.map((t, i) => ({ role: t.role, text: t.text, ts_start: i * 15, ts_end: i * 15 + 12 }));
-      await transcripts.ingest({ call_ref: sessionRef.current?.call_ref || `SIM-P${Date.now()}`, agent_id: agentInfo?.id || "", channel: "phone", duration_sec: duration, turns });
+      const res = await transcripts.ingest({ call_ref: sessionRef.current?.call_ref || `SIM-P${Date.now()}`, agent_id: agentInfo?.id || "", channel: "phone", duration_sec: duration, turns });
+      // Upload audio recording if available
+      if (recordingBlob && res?.data?.call_id) {
+        try { await transcripts.attachAudio(res.data.call_id, recordingBlob); } catch {}
+      }
       setAuditResult("✅ Call submitted for AI quality audit. Check My Performance for your score.");
     } catch (e) {
       setAuditResult("⚠️ Could not submit: " + (e.response?.data?.detail || e.message));

@@ -1,5 +1,7 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from database import engine, Base
 from config import settings
 
@@ -60,6 +62,10 @@ app.include_router(compliance.router)
 app.include_router(reports.router)
 app.include_router(live_monitor.router)
 app.include_router(simulation.router)
+
+# Serve uploaded recordings
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 @app.get("/health")
 async def health():
