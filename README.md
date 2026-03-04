@@ -245,20 +245,25 @@ This project is for educational and demonstration purposes.
 
 ## Deployment Guide (Vercel + Render + Neon)
 
-> **Architecture:** Frontend → **Vercel** (free) | Backend → **Render** (free) | Database → **Neon** (free PostgreSQL)
+> **Architecture:** Frontend → **Vercel** (free) | Backend → **Render** (free) | Database → **Supabase** (free PostgreSQL)
 >
 > The backend cannot run on Vercel because it uses WebSockets (Live Monitor), background tasks (AI audit queue), and file uploads — none of which are supported by Vercel serverless functions.
 
 ---
 
-### Step 1 — Free PostgreSQL on Neon
+### Step 1 — Free PostgreSQL on Supabase
 
-1. Sign up at **https://neon.tech** (free tier)
-2. Create a new project → create a database named `auditai`
-3. Go to **Dashboard → Connection Details** → copy the **connection string**  
-   It will look like: `postgresql://user:pass@ep-xxx.neon.tech/auditai`
-4. **Change the driver prefix** from `postgresql://` to `postgresql+asyncpg://`  
-   Final format: `postgresql+asyncpg://user:pass@ep-xxx.neon.tech/auditai?ssl=require`
+1. Sign up at **https://supabase.com** (free tier — 500 MB, 2 free projects)
+2. Click **New Project** → choose a name (e.g. `aipcsqa`) → set a strong database password → click **Create Project**
+3. Once the project is ready, go to **Project Settings → Database**
+4. Scroll down to **Connection string** → select the **URI** tab → copy the string  
+   It will look like: `postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres`
+5. **Change the driver prefix** from `postgresql://` to `postgresql+asyncpg://`  
+   Final format:
+   ```
+   postgresql+asyncpg://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
+   ```
+   > Replace `[password]` with the password you set and `[project-ref]` with your project's reference ID (visible in the URL).
 
 ---
 
@@ -275,7 +280,7 @@ This project is for educational and demonstration purposes.
 
    | Key | Value |
    |---|---|
-   | `DATABASE_URL` | Your Neon connection string (`postgresql+asyncpg://...?ssl=require`) |
+   | `DATABASE_URL` | Your Supabase connection string (`postgresql+asyncpg://postgres:[password]@db.[ref].supabase.co:5432/postgres`) |
    | `SECRET_KEY` | Any long random string |
    | `OPENAI_API_KEY` | Your Groq API key |
    | `OPENAI_BASE_URL` | `https://api.groq.com/openai/v1` |
@@ -327,5 +332,6 @@ Open your Vercel URL. The default supervisor login is:
 
 - **Render free tier** spins down after 15 minutes of inactivity. The first request after sleep takes ~30 seconds to wake up. Upgrade to a paid plan to avoid this.
 - **File uploads** are stored on Render's ephemeral disk — they are lost on redeploy. For production, configure an S3-compatible bucket (AWS S3, Cloudflare R2, Backblaze B2) and update the upload path logic.
-- **Neon free tier** provides 0.5 GB storage and 190 compute hours/month — sufficient for a demo/project.
+- **Supabase free tier** provides 500 MB storage and 2 free projects — sufficient for a demo/project.
+- Supabase also offers a built-in table editor and SQL editor at **https://supabase.com/dashboard** which is useful for inspecting your data.
 
