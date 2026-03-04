@@ -2392,7 +2392,8 @@ export default function App() {
   }, []);
 
   const handleLogin = (data) => {
-    setUser(data);
+    // Fetch full profile (includes email, team) after login
+    auth.me().then(r => setUser(r.data)).catch(() => setUser(data));
     setScreen(data.role === "agent" ? "My Dashboard" : "Dashboard");
   };
 
