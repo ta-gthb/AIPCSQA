@@ -2380,6 +2380,15 @@ export default function App() {
   const [screen,   setScreen]   = useState("");
   const [checking, setChecking] = useState(true);
 
+  // Keep Render backend awake: ping /health every 10 minutes
+  useEffect(() => {
+    const apiBase = (process.env.REACT_APP_API_URL || "http://localhost:8000").replace(/\/$/, "");
+    const ping = () => fetch(`${apiBase}/health`).catch(() => {});
+    ping(); // immediate ping on load
+    const id = setInterval(ping, 10 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {

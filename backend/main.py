@@ -1,4 +1,5 @@
 import os
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +24,25 @@ app.add_middleware(
 	allow_methods=["*"],
 	allow_headers=["*"],
 )
+
+# ── Self-ping to prevent Render free-tier sleep ────────────────────────────
+async def _self_ping():
+	"""Ping our own /health endpoint every 10 minutes so Render doesn't idle us out."""
+	import httpx
+	ping_url = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
+	if not ping_url:
+		print("[self-ping] RENDER_EXTERNAL_URL not set — self-ping disabled")
+		return
+	ping_url = f"{ping_url}/health"
+	print(f"[self-ping] Starting keep-alive pings every 10 min → {ping_url}")
+	async with httpx.AsyncClient(timeout=10) as client:
+		while True:
+			await asyncio.sleep(10 * 60)  # 10 minutes
+			try:
+				r = await client.get(ping_url)
+				print(f"[self-ping] {ping_url} → {r.status_code}")
+			except Exception as e:
+				print(f"[self-ping] ping failed: {e}")
 
 @app.on_event("startup")
 async def on_startup():
@@ -53,6 +73,9 @@ async def on_startup():
 			session.add(user)
 			await session.commit()
 			print(f"Default supervisor created: {default_email} / {default_password}")
+
+	# Start background self-ping loop
+	asyncio.create_task(_self_ping())
 
 app.include_router(auth.router)
 app.include_router(dashboard.router)
