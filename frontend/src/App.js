@@ -356,7 +356,7 @@ function SupervisorAgents() {
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <h1 style={{ fontSize: 22, fontWeight: 800 }}>Agents</h1>
         <div style={{ display: "flex", gap: 4, background: t.surface2, borderRadius: 10, padding: 4, border: `1px solid ${t.border}` }}>
           {[["agents", "👥 Agents"], ["messages", "✉️ Messages"]].map(([key, label]) => (
@@ -453,6 +453,7 @@ function SupervisorAgents() {
 
 // ── Supervisor Audit ─────────────────────────────────────────────
 function SupervisorAudit() {
+  const isMobile = useMobile();
   const [agentList,  setAgentList]  = useState([]);
   const [selAgent,   setSelAgent]   = useState(null);
   const [list,       setList]       = useState([]);
@@ -460,6 +461,7 @@ function SupervisorAudit() {
   const [detail,     setDetail]     = useState(null);
   const [loadAgents, setLoadAgents] = useState(true);
   const [loading,    setLoading]    = useState(false);
+  const [auditTab,   setAuditTab]   = useState("calls");
 
   useEffect(() => {
     agents.list({ limit: 100 }).then(r => setAgentList(r.data)).catch(() => {}).finally(() => setLoadAgents(false));
@@ -474,6 +476,7 @@ function SupervisorAudit() {
 
   const selectCall = async (call) => {
     setSelected(call.call_id);
+    if (isMobile) setAuditTab("transcript");
     try { const r = await transcripts.get(call.call_id); setDetail(r.data); } catch {}
   };
 
@@ -516,9 +519,17 @@ function SupervisorAudit() {
           <div style={{ fontSize: 15, fontWeight: 600, color: t.muted }}>Select an agent above to begin audit review</div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "260px 1fr 280px", gap: 16, height: 560 }}>
+        <>
+          {isMobile && (
+            <div style={{ display: "flex", gap: 4, marginBottom: 12, background: t.surface2, borderRadius: 10, padding: 4, border: `1px solid ${t.border}` }}>
+              {[["calls","📋 Calls"],["transcript","💬 Transcript"],["audit","🔍 AI Audit"]].map(([key,label]) => (
+                <button key={key} onClick={() => setAuditTab(key)} style={{ flex: 1, padding: "8px 4px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 12, fontWeight: auditTab === key ? 700 : 400, background: auditTab === key ? t.amber : "transparent", color: auditTab === key ? "#000" : t.muted, fontFamily: "inherit", transition: "all 0.15s" }}>{label}</button>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "260px 1fr 280px", gap: 16, height: isMobile ? "auto" : 560 }}>
           {/* Call list */}
-          <div style={{ ...S.card, padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div style={{ ...S.card, padding: 0, overflow: "hidden", display: (isMobile && auditTab !== "calls") ? "none" : "flex", flexDirection: "column", height: isMobile ? 380 : "100%" }}>
             <div style={{ padding: 14, borderBottom: `1px solid ${t.border}`, fontWeight: 700, fontSize: 14 }}>Calls — {selAgent.name}</div>
             <div style={{ overflowY: "auto", flex: 1 }}>
               {loading && <div style={{ padding: 14, color: t.muted }}>Loading...</div>}
@@ -537,7 +548,7 @@ function SupervisorAudit() {
           </div>
 
           {/* Transcript viewer */}
-          <div style={{ ...S.card, padding: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ ...S.card, padding: 0, display: (isMobile && auditTab !== "transcript") ? "none" : "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 420 : "100%" }}>
             <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, fontWeight: 700 }}>{detail ? detail.call.ref : "Select a call"}</div>
             {detail?.call?.audio_filename && (
               <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
@@ -569,7 +580,7 @@ function SupervisorAudit() {
           </div>
 
           {/* AI Audit panel */}
-          <div style={{ ...S.card, padding: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ ...S.card, padding: 0, display: (isMobile && auditTab !== "audit") ? "none" : "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 420 : "100%" }}>
             <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}`, fontWeight: 700, fontSize: 14 }}>AI Audit</div>
             <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
               {detail?.audit ? (
@@ -605,6 +616,7 @@ function SupervisorAudit() {
             </div>
           </div>
         </div>
+        </>
       )}
     </div>
   );
@@ -612,6 +624,7 @@ function SupervisorAudit() {
 
 // ── Supervisor Compliance ────────────────────────────────────────
 function SupervisorCompliance() {
+  const isMobile = useMobile();
   const [overview,   setOverview]   = useState(null);
   const [breakdown,  setBreakdown]  = useState([]);
   const [alertsList, setAlertsList] = useState([]);
@@ -630,7 +643,7 @@ function SupervisorCompliance() {
   return (
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 20 }}>Compliance</h1>
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 16, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "200px 1fr", gap: 16, marginBottom: 16 }}>
         <div style={{ ...S.card, textAlign: "center" }}>
           <div style={S.sec}>Score</div>
           <div style={{ color: (overview?.compliance_score || 0) >= 95 ? t.green : t.amber, fontSize: 40, fontWeight: 800, fontFamily: "monospace" }}>{overview?.compliance_score ?? "—"}%</div>
@@ -677,6 +690,7 @@ function SupervisorCompliance() {
 
 // ── Supervisor Reports ───────────────────────────────────────────
 function SupervisorReports() {
+  const isMobile = useMobile();
   const [agentList, setAgentList] = useState([]);
   const [form, setForm] = useState({
     title: "", report_type: "agent_performance", agent_id: "",
@@ -727,7 +741,7 @@ function SupervisorReports() {
   return (
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 20 }}>Reports</h1>
-      <div style={{ display: "grid", gridTemplateColumns: "400px 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "400px 1fr", gap: 16 }}>
         {/* ── Builder ── */}
         <div style={S.card}>
           <div style={S.sec}>Agent Report Builder</div>
@@ -765,7 +779,7 @@ function SupervisorReports() {
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10, marginBottom: 14 }}>
             <div>
               <label style={S.label}>FROM DATE</label>
               <input type="date" style={S.input} value={form.date_from}
@@ -794,6 +808,24 @@ function SupervisorReports() {
         {/* ── Reports list ── */}
         <div style={S.card}>
           <div style={S.sec}>Generated Reports</div>
+          {isMobile ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {list.map((r, i) => (
+                <div key={i} style={{ padding: "12px 0", borderBottom: `1px solid ${t.border}` }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{r.title}</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 4 }}>
+                    <Tag label={(reportTypeInfo[r.type]?.label || (r.type || "").replace(/_/g, " "))} color={reportTypeInfo[r.type]?.color || t.blue} />
+                    <Tag label={r.ready ? "Ready" : "Processing"} color={r.ready ? t.green : t.amber} />
+                  </div>
+                  <div style={{ color: t.muted, fontSize: 11, marginBottom: 6 }}>{r.agent_name || "—"} · {new Date(r.created_at).toLocaleDateString()}</div>
+                  {r.ready && (
+                    <button onClick={() => viewReport(r.id, r.title)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px" }}>⬇ View</button>
+                  )}
+                </div>
+              ))}
+              {list.length === 0 && <div style={{ color: t.muted, fontSize: 13 }}>No reports yet — generate one for an agent above</div>}
+            </div>
+          ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr>{["Title", "Agent", "Type", "Date", "Size", "Status", ""].map(h => (
@@ -819,6 +851,7 @@ function SupervisorReports() {
               )}
             </tbody>
           </table>
+          )}
         </div>
       </div>
     </div>
@@ -827,6 +860,7 @@ function SupervisorReports() {
 
 // ── Supervisor Live Monitor ──────────────────────────────────────
 function SupervisorLiveMonitor() {
+  const isMobile = useMobile();
   const [calls,  setCalls]  = useState([]);
   const [events, setEvents] = useState([]);
   const wsRef = useRef(null);
@@ -858,8 +892,8 @@ function SupervisorLiveMonitor() {
         <h1 style={{ fontSize: 22, fontWeight: 800 }}>Live Monitor</h1>
         <span style={{ color: t.muted, fontSize: 13 }}>· {calls.length} active calls</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 300px", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
           {calls.map((c, i) => (
             <div key={i} style={S.card}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
@@ -895,6 +929,7 @@ function SupervisorLiveMonitor() {
 }
 
 function SupervisorMessages() {
+  const isMobile = useMobile();
   const [msgs, setMsgs] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -925,7 +960,7 @@ function SupervisorMessages() {
         {unread === 0 && msgs.length > 0 && <span style={{ color: t.muted, fontSize: 13 }}>All messages read</span>}
       </div>
       {loading ? <div style={{ color: t.muted }}>Loading...</div> : (
-        <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16, minHeight: 400 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "320px 1fr", gap: 16, minHeight: 400 }}>
           <div style={{ ...S.card, padding: 0, overflowY: "auto", maxHeight: 600 }}>
             {msgs.length === 0 && <div style={{ padding: 24, color: t.muted }}>No messages yet.</div>}
             {msgs.map(m => (
@@ -962,6 +997,7 @@ function SupervisorMessages() {
 
 // ── Supervisor Profile ──────────────────────────────────────────
 function SupervisorProfile({ user }) {
+  const isMobile = useMobile();
   const [oldPwd, setOldPwd]   = useState("");
   const [newPwd, setNewPwd]   = useState("");
   const [newPwd2, setNewPwd2] = useState("");
@@ -1011,7 +1047,7 @@ function SupervisorProfile({ user }) {
       {/* Detail fields */}
       <div style={{ ...S.card, marginBottom: 20 }}>
         <div style={S.sec}>Account Details</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 0 }}>
           {fields.map((f) => (
             <div key={f.label} style={{ padding: "14px 0", borderBottom: `1px solid ${t.border}`, paddingRight: 16 }}>
               <div style={{ color: t.muted, fontSize: 11, fontWeight: 700, letterSpacing: 1.2, marginBottom: 4 }}>{f.icon} {f.label.toUpperCase()}</div>
@@ -1044,6 +1080,7 @@ function SupervisorProfile({ user }) {
 // ════════════════════════════════════════════════════════════════
 // ── Agent Profile ────────────────────────────────────────────────
 function AgentProfile({ user }) {
+  const isMobile = useMobile();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -1112,7 +1149,7 @@ function AgentProfile({ user }) {
           {/* Detail fields */}
           <div style={{ ...S.card, marginBottom: 20 }}>
             <div style={S.sec}>Account Details</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 0 }}>
               {fields.map((f) => (
                 <div key={f.label} style={{ padding: "14px 0", borderBottom: `1px solid ${t.border}`, paddingRight: 16 }}>
                   <div style={{ color: t.muted, fontSize: 11, fontWeight: 700, letterSpacing: 1.2, marginBottom: 4 }}>{f.icon} {f.label.toUpperCase()}</div>
@@ -1309,6 +1346,7 @@ function AgentDashboard({ name, setScreen: setScreenProp }) {
 
 // ── Agent Live Chat ──────────────────────────────────────────────
 function AgentLiveChat() {
+  const isMobile = useMobile();
   const [session,     setSession]     = useState(null);
   const [messages,    setMessages]    = useState([]);
   const [input,       setInput]       = useState("");
@@ -1415,7 +1453,7 @@ function AgentLiveChat() {
         </div>
         {status === "active" && <button onClick={endChat} style={{ ...S.ghost, color: t.red, borderColor: t.red }}>End Chat</button>}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 16, height: 560 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 280px", gap: 16, height: isMobile ? "auto" : 560 }}>
         <div style={{ ...S.card, padding: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ padding: "12px 16px", borderBottom: `1px solid ${t.border}`, display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: "50%", background: t.blue + "22", display: "flex", alignItems: "center", justifyContent: "center" }}>🤖</div>
@@ -1476,6 +1514,7 @@ function AgentLiveChat() {
 
 // ── Agent Voice Call ─────────────────────────────────────────────
 function AgentVoiceCall() {
+  const isMobile = useMobile();
   const [callState,    setCallState]    = useState("idle"); // idle|starting|speaking|listening|ending|ended
   const [duration,     setDuration]     = useState(0);
   const [muted,        setMuted]        = useState(false);
@@ -1673,7 +1712,7 @@ function AgentVoiceCall() {
   return (
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 20 }}>🎙️ Voice Call</h1>
-      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "300px 1fr", gap: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ ...S.card, textAlign: "center" }}>
             <div style={{ width: 80, height: 80, borderRadius: "50%", margin: "0 auto 12px",
@@ -2197,6 +2236,27 @@ function AgentPerformance() {
             <div style={S.sec}>Audit History — {myTranscripts.length} records</div>
           </div>
           {loading && <div style={{ color: t.muted, fontSize: 13, padding: "10px 0" }}>Loading...</div>}
+          {isMobile ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {myTranscripts.map((c, i) => (
+                <div key={i} style={{ padding: "12px 0", borderBottom: `1px solid ${t.border}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontFamily: "monospace", fontWeight: 700, color: t.amber, fontSize: 13 }}>{c.call_ref}</span>
+                    <Tag label={c.status} color={c.status === "audited" ? t.green : c.status === "processing" ? t.amber : c.status === "failed" ? t.red : t.muted} />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span>{channelIcon(c.channel)}</span>
+                    <span style={{ color: t.text, fontSize: 12 }}>{channelLabel(c.channel)}</span>
+                    <span style={{ color: t.muted, fontSize: 11 }}>{new Date(c.created_at).toLocaleDateString()}</span>
+                    {c.score != null ? <Badge score={Math.round(c.score)} /> : <span style={{ color: t.muted, fontSize: 11 }}>Pending</span>}
+                  </div>
+                </div>
+              ))}
+              {!loading && myTranscripts.length === 0 && (
+                <div style={{ padding: "30px 0", color: t.muted, textAlign: "center", fontSize: 13 }}>No calls yet — start a Live Chat or Voice Call to build your history!</div>
+              )}
+            </div>
+          ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr>
@@ -2232,6 +2292,7 @@ function AgentPerformance() {
               )}
             </tbody>
           </table>
+          )}
         </div>
       )}
 
