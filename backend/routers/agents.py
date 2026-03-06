@@ -53,12 +53,15 @@ async def delete_agent(agent_id: str, db: AsyncSession = Depends(get_db), user: 
 	# Delete audit results and transcripts via calls
 	from models.transcript import Transcript
 	from models.audit import AuditResult
+	from models.report import Report
 	call_rows = await db.execute(select(Call.id).where(Call.agent_id == agent_uuid))
 	call_ids = [r[0] for r in call_rows]
 	if call_ids:
 		await db.execute(delete(AuditResult).where(AuditResult.call_id.in_(call_ids)))
 		await db.execute(delete(Transcript).where(Transcript.call_id.in_(call_ids)))
 		await db.execute(delete(Call).where(Call.id.in_(call_ids)))
+	# Delete reports created by (or for) this user — FK reports.created_by → users.id
+	await db.execute(delete(Report).where(Report.created_by == user_uuid))
 	await db.execute(delete(Agent).where(Agent.id == agent_uuid))
 	await db.execute(delete(User).where(User.id == user_uuid))
 	await db.commit()
