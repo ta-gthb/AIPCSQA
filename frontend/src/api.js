@@ -56,7 +56,10 @@ export const transcripts = {
   upload:           (formData)       => api.post("/transcripts/upload", formData, { headers: { "Content-Type": "multipart/form-data" } }),
   attachAudio:      (callId, blob)   => {
     const fd = new FormData();
-    fd.append("file", blob, "recording.webm");
+    // Derive a correct file extension from the blob's MIME type so the backend
+    // can serve it back with the right Content-Type via StaticFiles.
+    const ext = blob.type.includes("ogg") ? ".ogg" : ".webm";
+    fd.append("file", blob, `recording${ext}`);
     return api.post(`/transcripts/${callId}/audio`, fd, { headers: { "Content-Type": "multipart/form-data" } });
   },
   list:             (params)         => api.get("/transcripts/", { params }),

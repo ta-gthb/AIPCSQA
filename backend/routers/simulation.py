@@ -5,10 +5,12 @@ Provides two endpoints:
   POST /simulation/start  – spin up a scenario, return call_ref + AI opening line
   POST /simulation/turn   – agent sends a message, get AI customer reply
 """
+import io
 import random
 import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from routers.auth import current_user
@@ -74,3 +76,23 @@ async def simulation_turn(
     history = [t.dict() for t in body.history]
     reply   = await get_customer_reply(scenario_obj, history)
     return {"customer_text": reply}
+
+
+@router.get("/tts")
+async def text_to_speech(
+    text: str = Query(..., max_length=500),
+    _: User = Depends(current_user),
+):
+    """
+    Convert text to speech (MP3) so the browser can play customer voice
+    through the Web Audio API and capture it in the mixed recording.
+    """
+    from gtts import gTTS
+    buf = io.BytesIO()
+    gTTS(text=text, lang="en", slow=False).write_to_fp(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store"},
+    )

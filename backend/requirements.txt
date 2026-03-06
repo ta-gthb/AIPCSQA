@@ -14,3 +14,5 @@ openai==1.14.3
 httpx==0.26.0
 anyio==3.7.1
 assemblyai==0.53.0
+numpy>=1.26.0
+gTTS>=2.3.2

@@ -1,9 +1,16 @@
 import os
+import mimetypes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from database import engine, Base
 from config import settings
+
+# Ensure .webm audio files are served with the correct MIME type.
+# Python's default mimetypes maps .webm -> video/webm which browsers
+# refuse to play in <audio> elements.
+mimetypes.add_type("audio/webm", ".webm")
+mimetypes.add_type("audio/ogg",  ".ogg")
 
 from models import user, agent, call, transcript, audit, violation, report, message  # noqa
 

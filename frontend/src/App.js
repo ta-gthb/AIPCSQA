@@ -552,12 +552,21 @@ function SupervisorAudit() {
             <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, fontWeight: 700 }}>{detail ? detail.call.ref : "Select a call"}</div>
             {detail?.call?.audio_filename && (
               <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
-                <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>RECORDING</div>
+                <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>RECORDING (agent mic only)</div>
+                {/* key forces React to unmount+remount the <audio> element whenever
+                    the selected call changes, so the browser loads the new source
+                    instead of keeping the previous call's buffered audio. */}
                 <audio
+                  key={detail.call.audio_filename}
                   controls
-                  src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
                   style={{ width: "100%", height: 36 }}
-                />
+                >
+                  <source
+                    src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
+                    type={detail.call.audio_filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
+                  />
+                  Your browser does not support audio playback.
+                </audio>
               </div>
             )}
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1535,6 +1544,8 @@ function AgentVoiceCall() {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef   = useRef([]);
   const micStreamRef     = useRef(null);
+  const audioCtxRef      = useRef(null);   // Web Audio context for mixing
+  const mixDestRef       = useRef(null);   // MediaStreamDestination (mic + TTS mixed)
 
   useEffect(() => {
     agents.me().then(r => setAgentInfo(r.data)).catch(() => {});
@@ -1547,22 +1558,66 @@ function AgentVoiceCall() {
     window.speechSynthesis?.cancel();
     try { if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop(); } catch {}
     micStreamRef.current?.getTracks().forEach(tr => tr.stop());
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    mixDestRef.current  = null;
   }, []);
 
   const fmt = s => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
   const now  = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+  // Speak customer text through the Web Audio mix so the MediaRecorder captures
+  // both the agent mic AND the customer TTS in one recording file.
+  // Falls back to window.speechSynthesis (mic-only recording) if the backend
+  // TTS endpoint is unavailable.
   const speak = (text, onDone) => {
-    const synth = window.speechSynthesis;
-    synth.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.rate  = 0.95; utt.pitch = 1.1;
-    const voices = synth.getVoices();
-    const pick   = voices.find(v => /Zira|Susan|Karen|Samantha|female/i.test(v.name));
-    if (pick) utt.voice = pick;
-    utt.onend  = () => onDone?.();
-    utt.onerror = () => onDone?.();
-    synth.speak(utt);
+    const ctx  = audioCtxRef.current;
+    const dest = mixDestRef.current;
+    const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
+    const token  = localStorage.getItem("token") || "";
+
+    if (ctx && dest) {
+      // ── Web Audio path: fetch MP3 from backend, decode, route through mixer ──
+      fetch(`${apiUrl}/simulation/tts?text=${encodeURIComponent(text)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(r => r.arrayBuffer())
+        .then(buf => ctx.decodeAudioData(buf))
+        .then(decoded => {
+          const src = ctx.createBufferSource();
+          src.buffer = decoded;
+          src.connect(ctx.destination); // speakers — agent hears the customer
+          src.connect(dest);            // recording mix — captured in the audio file
+          src.onended = () => onDone?.();
+          src.start();
+        })
+        .catch(() => {
+          // Backend TTS failed (network error, quota, etc.) — fall back to
+          // speechSynthesis so the call flow is never broken.
+          const synth = window.speechSynthesis;
+          synth.cancel();
+          const utt = new SpeechSynthesisUtterance(text);
+          utt.rate = 0.95; utt.pitch = 1.1;
+          const voices = synth.getVoices();
+          const pick = voices.find(v => /Zira|Susan|Karen|Samantha|female/i.test(v.name));
+          if (pick) utt.voice = pick;
+          utt.onend  = () => onDone?.();
+          utt.onerror = () => onDone?.();
+          synth.speak(utt);
+        });
+    } else {
+      // ── Fallback path (AudioContext not ready) ──
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.rate = 0.95; utt.pitch = 1.1;
+      const voices = synth.getVoices();
+      const pick = voices.find(v => /Zira|Susan|Karen|Samantha|female/i.test(v.name));
+      if (pick) utt.voice = pick;
+      utt.onend  = () => onDone?.();
+      utt.onerror = () => onDone?.();
+      synth.speak(utt);
+    }
   };
 
   const startListening = () => {
@@ -1606,13 +1661,28 @@ function AgentVoiceCall() {
       timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
       isActiveRef.current = true;
 
-      // Start mic recording
+      // ── Start mixed recording (agent mic + customer TTS) ──
+      // We create a Web Audio context with a MediaStreamDestination as the
+      // recording target.  The agent mic is always routed into it.  The
+      // speak() function also routes each TTS audio buffer into the same
+      // destination, so the recorded file contains both voices.
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         micStreamRef.current = stream;
+
+        // Build the Web Audio mix pipeline
+        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+        const dest = ctx.createMediaStreamDestination();
+        audioCtxRef.current = ctx;
+        mixDestRef.current  = dest;
+
+        // Agent mic → mix destination (NOT to ctx.destination to avoid echo)
+        ctx.createMediaStreamSource(stream).connect(dest);
+
+        // Record the mixed stream
         audioChunksRef.current = [];
         const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : (MediaRecorder.isTypeSupported("audio/ogg") ? "audio/ogg" : "");
-        const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        const mr = mimeType ? new MediaRecorder(dest.stream, { mimeType }) : new MediaRecorder(dest.stream);
         mr.ondataavailable = e => { if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data); };
         mr.start(1000);
         mediaRecorderRef.current = mr;
@@ -1648,7 +1718,11 @@ function AgentVoiceCall() {
       recordingBlob = await new Promise(resolve => {
         mr.onstop = () => {
           const chunks = audioChunksRef.current;
-          resolve(chunks.length > 0 ? new Blob(chunks, { type: chunks[0].type || "audio/webm" }) : null);
+          // Use mr.mimeType (e.g. "audio/webm;codecs=opus") — individual chunk
+          // objects often have an empty .type, so always prefer the recorder's
+          // declared mimeType which is set at construction time.
+          const mime = mr.mimeType || "audio/webm";
+          resolve(chunks.length > 0 ? new Blob(chunks, { type: mime }) : null);
         };
         mr.stop();
       });

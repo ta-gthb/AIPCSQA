@@ -40,7 +40,43 @@ async def _persist_audit(call_id: str, agent_id: str, turns: list[dict]):
 			call = await db.get(Call, call_uuid)
 			if not call:
 				return
-			ai   = await audit_transcript(turns)
+
+			# ── If the agent never spoke, produce an automatic hard-fail score
+			# without calling the LLM (which tends to give generous scores for
+			# near-empty transcripts).
+			agent_turns = [t for t in turns if t.get("role") == "agent"]
+			if len(agent_turns) == 0:
+				ai = {
+					"overall_score": 4.0,
+					"dimensions": {
+						"empathy":         0.0,
+						"compliance":       0.0,
+						"resolution":       0.0,
+						"professionalism":  1.0,
+						"communication":    0.0,
+					},
+					"sentiment": "negative",
+					"violations": [{
+						"type":        "No Agent Response",
+						"severity":    "Critical",
+						"turn_index":  0,
+						"description": "Agent did not respond to the customer at all. "
+									   "The call ended without the agent speaking a single word.",
+					}],
+					"suggestions": [{
+						"turn_index":  0,
+						"original":    "",
+						"suggestion":  "Greet the customer, acknowledge their issue, and work toward a resolution.",
+						"reason":      "The agent failed to respond entirely — every customer deserves a response.",
+					}],
+					"summary": (
+						"The agent did not respond to the customer at all. "
+						"The customer presented their issue but received zero assistance. "
+						"This is a critical failure requiring immediate coaching and supervisor review."
+					),
+				}
+			else:
+				ai = await audit_transcript(turns)
 			dims = ai.get("dimensions", {})
 			result = AuditResult(
 				call_id=call.id,
