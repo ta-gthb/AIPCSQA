@@ -7,12 +7,16 @@ An end-to-end platform for automatically auditing call centre agent interactions
 ## Features
 
 - **AI Audit Engine** — Groq LLM scores every call across 5 dimensions (Empathy, Compliance, Resolution, Professionalism, Communication) with letter grades (A+ → F)
+- **RAG Policy Engine** — TF-IDF knowledge base of 36 Flipkart policy chunks (Returns, Refunds, Cancellations, Delivery, Payments, and more); relevant policy context is automatically injected into every audit and simulation prompt
+- **Flipkart Simulation** — 10 realistic Flipkart customer scenarios (missing delivery, wrong item, refund, account locked, EMI issue, etc.); AI customer pushes back if the agent states incorrect policy
+- **Mixed-Voice Recording** — Web Audio API mixes agent microphone + customer TTS (gTTS) into a single recording file so both voices are audible in the supervisor portal playback
 - **Speaker Diarization** — AssemblyAI automatically splits uploaded recordings into Agent / Customer turns
-- **Supervisor Portal** — Dashboard KPIs, agent management, audit review, compliance tracking, report generation, agent messages inbox
-- **Agent Portal** — Live simulation practice, upload recordings, view personal performance, download PDF reports, contact supervisor
+- **Supervisor Portal** — Dashboard KPIs, agent management, audit review with per-call audio playback, compliance tracking, report generation, agent messages inbox
+- **Agent Portal** — Live voice simulation practice, upload recordings, view personal performance, download PDF reports, contact supervisor
 - **PDF Reports** — Performance, Compliance, Scorecard, and Custom reports with tiered commentary badges
 - **Live Monitor** — WebSocket-based real-time activity feed
 - **Role-based auth** — JWT-secured routes for `agent` and `supervisor` roles
+- **Silent-agent protection** — Calls where the agent never speaks receive an automatic Critical score (4/100) without calling the LLM
 
 ---
 
@@ -23,8 +27,10 @@ An end-to-end platform for automatically auditing call centre agent interactions
 | Backend | Python 3.10+, FastAPI, SQLAlchemy (async), Alembic |
 | Database | PostgreSQL |
 | AI / LLM | Groq API (`llama-3.3-70b-versatile`) |
+| RAG | TF-IDF cosine similarity (numpy) — no external embedding API |
+| TTS | gTTS (Google Text-to-Speech, free) — used for customer voice in simulation |
 | Transcription | AssemblyAI (`universal-2`, speaker diarization) |
-| Frontend | React 18, single-page app (`App.js`) |
+| Frontend | React 18, single-page app (`App.js`), Web Audio API |
 | Auth | JWT (python-jose), bcrypt (passlib) |
 | Real-time | WebSockets |
 
@@ -162,10 +168,12 @@ Log in as Supervisor → go to **Agents** tab → click **Register New Agent** �
 ```
 AIPCSQA/
 ├── backend/
-│   ├── main.py                  # FastAPI app entry point
+│   ├── main.py                  # FastAPI app entry point, MIME type registration
 │   ├── config.py                # Pydantic settings (reads .env)
 │   ├── database.py              # Async SQLAlchemy engine & session
 │   ├── websocket_manager.py     # WebSocket broadcast manager
+│   ├── knowledge/
+│   │   └── flipkart_policies.py # 36 Flipkart policy chunks across 12 categories
 │   ├── models/                  # SQLAlchemy ORM models
 │   │   ├── user.py
 │   │   ├── agent.py
@@ -178,22 +186,23 @@ AIPCSQA/
 │   ├── routers/                 # FastAPI route handlers
 │   │   ├── auth.py              # Login / register / password change
 │   │   ├── agents.py            # Agent CRUD, supervisor messages
-│   │   ├── transcripts.py       # Upload, ingest, list transcripts
+│   │   ├── transcripts.py       # Upload, ingest, list transcripts; audio attach
 │   │   ├── compliance.py        # Compliance violations
 │   │   ├── dashboard.py         # KPIs, leaderboard, activity feed
 │   │   ├── reports.py           # Report generation & download
 │   │   ├── live_monitor.py      # WebSocket live feed
-│   │   └── simulation.py        # AI customer simulation
+│   │   └── simulation.py        # AI customer simulation + TTS endpoint
 │   ├── services/
-│   │   ├── ai_auditor.py        # Groq LLM audit logic
+│   │   ├── ai_auditor.py        # Groq LLM audit logic with RAG context injection
 │   │   ├── scoring.py           # Agent stats aggregation
-│   │   └── customer_bot.py      # AI customer simulation bot
+│   │   ├── customer_bot.py      # 10 Flipkart scenarios, RAG-augmented prompts
+│   │   └── rag.py               # TF-IDF retrieval engine over policy knowledge base
 │   ├── requirements.txt
 │   └── alembic.cfg              # (auto-generated, not needed manually)
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── App.js               # Entire React SPA (~2200 lines)
+│   │   ├── App.js               # Entire React SPA; Web Audio mix recording
 │   │   ├── api.js               # Axios API client
 │   │   └── index.js
 │   └── package.json
@@ -210,10 +219,11 @@ AIPCSQA/
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string (asyncpg driver) |
 | `SECRET_KEY` | JWT signing key — use a long random string in production |
-| `OPENAI_API_KEY` | Your Groq API key (used for LLM + Whisper) |
+| `OPENAI_API_KEY` | Your Groq API key (used for LLM calls) |
 | `OPENAI_BASE_URL` | Groq endpoint — keep as `https://api.groq.com/openai/v1` |
-| `ASSEMBLYAI_API_KEY` | Your AssemblyAI key for speaker diarization |
-| `REPORT_DIR` | Directory where generated report JSON files are stored |
+| `ASSEMBLYAI_API_KEY` | Your AssemblyAI key for speaker diarization on uploaded recordings |
+| `REPORT_DIR` | Directory where generated report JSON files are stored (default: `./reports`) |
+| `UPLOAD_DIR` | Directory where call audio recordings are stored (default: `./uploads`) |
 | `MAX_AUDIO_MB` | Maximum upload file size in MB (default: 50) |
 
 ---
@@ -234,6 +244,15 @@ AIPCSQA/
 
 **`uvicorn: command not found` (macOS/Linux)**  
 → Make sure the virtual environment is activated: `source venv/bin/activate`
+
+**Customer voice is not audible in the recorded audio file**  
+→ The recording uses Web Audio API to mix the agent mic with the customer TTS stream. Make sure the browser grants microphone permission and the backend `/simulation/tts` endpoint is reachable (requires `gTTS` installed: `pip install gTTS`).
+
+**TTS endpoint returns 500 / `ModuleNotFoundError: gtts`**  
+→ Run `pip install gTTS` inside the backend virtual environment, then restart `uvicorn`.
+
+**Recorded audio plays with no sound in supervisor portal (video/webm error)**  
+→ This is fixed automatically — `main.py` registers `audio/webm` and `audio/ogg` MIME types at startup so StaticFiles serves the correct `Content-Type` header.
 
 ---
 
