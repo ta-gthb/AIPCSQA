@@ -262,7 +262,7 @@ This project is for educational and demonstration purposes.
 
 ---
 
-## Deployment Guide (Vercel + Render + Neon)
+## Deployment Guide (Vercel + Render + Supabase)
 
 > **Architecture:** Frontend → **Vercel** (free) | Backend → **Render** (free) | Database → **Supabase** (free PostgreSQL)
 >
