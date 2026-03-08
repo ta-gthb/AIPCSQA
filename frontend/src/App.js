@@ -803,7 +803,7 @@ function SupervisorReports() {
             <div>
               <label style={S.label}>TO DATE</label>
               <input type="date" style={S.input} value={form.date_to}
-                max={new Date().toISOString().split("T")[0]}
+                max={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split("T")[0]}
                 onChange={e => setForm(f => ({ ...f, date_to: e.target.value }))} />
             </div>
           </div>
