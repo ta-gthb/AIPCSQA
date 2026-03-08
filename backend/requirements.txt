@@ -16,3 +16,4 @@ anyio==3.7.1
 assemblyai==0.53.0
 numpy>=1.26.0
 gTTS>=2.3.2
+edge-tts>=6.1.9

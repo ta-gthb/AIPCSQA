@@ -77,6 +77,7 @@ export const reports = {
   generate:  (data)   => api.post("/reports/generate", data),
   list:      ()       => api.get("/reports/"),
   download:  (id)     => api.get(`/reports/${id}/download`, { responseType: "blob" }),
+  remove:    (id)     => api.delete(`/reports/${id}`),
   myReports: (params) => api.get("/reports/my-reports", { params }),
 };
 

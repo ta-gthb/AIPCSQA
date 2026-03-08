@@ -154,8 +154,7 @@ function SupervisorNav({ screen, setScreen, name, onLogout }) {
                 {icon} {label}
               </button>
             ))}
-            <div style={{ padding: "12px 20px", borderTop: `1px solid ${t.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ color: t.muted, fontSize: 13 }}>👋 {name}</span>
+            <div style={{ padding: "12px 20px", borderTop: `1px solid ${t.border}`, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
               <button onClick={onLogout} style={{ ...S.ghost, fontSize: 12 }}>Logout</button>
             </div>
           </div>
@@ -176,7 +175,6 @@ function SupervisorNav({ screen, setScreen, name, onLogout }) {
         </button>
       ))}
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ color: t.muted, fontSize: 13 }}>👋 {name}</span>
         <button onClick={onLogout} style={{ ...S.ghost, fontSize: 12 }}>Logout</button>
       </div>
     </nav>
@@ -552,7 +550,7 @@ function SupervisorAudit() {
             <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, fontWeight: 700 }}>{detail ? detail.call.ref : "Select a call"}</div>
             {detail?.call?.audio_filename && (
               <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
-                <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>RECORDING (agent mic only)</div>
+                <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>AUDIO RECORDING</div>
                 {/* key forces React to unmount+remount the <audio> element whenever
                     the selected call changes, so the browser loads the new source
                     instead of keeping the previous call's buffered audio. */}
@@ -737,6 +735,14 @@ function SupervisorReports() {
     } catch { alert("Could not load report data"); }
   };
 
+  const deleteReport = async (id) => {
+    if (!window.confirm("Delete this report? This cannot be undone.")) return;
+    try {
+      await reports.remove(id);
+      setList(prev => prev.filter(r => r.id !== id));
+    } catch { alert("Failed to delete report"); }
+  };
+
   const reportTypeInfo = {
     agent_performance: { label: "Agent Performance",  color: t.blue,   desc: "Overall scores, dimension breakdown, trends & improvement tips" },
     compliance:        { label: "Compliance Report",   color: t.red,    desc: "Violations log, severity breakdown & compliance rate" },
@@ -827,9 +833,12 @@ function SupervisorReports() {
                     <Tag label={r.ready ? "Ready" : "Processing"} color={r.ready ? t.green : t.amber} />
                   </div>
                   <div style={{ color: t.muted, fontSize: 11, marginBottom: 6 }}>{r.agent_name || "—"} · {new Date(r.created_at).toLocaleDateString()}</div>
-                  {r.ready && (
-                    <button onClick={() => viewReport(r.id, r.title)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px" }}>⬇ View</button>
-                  )}
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {r.ready && (
+                      <button onClick={() => viewReport(r.id, r.title)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px" }}>⬇ View</button>
+                    )}
+                    <button onClick={() => deleteReport(r.id)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px", color: t.red, borderColor: t.red }}>🗑 Delete</button>
+                  </div>
                 </div>
               ))}
               {list.length === 0 && <div style={{ color: t.muted, fontSize: 13 }}>No reports yet — generate one for an agent above</div>}
@@ -850,9 +859,12 @@ function SupervisorReports() {
                   <td style={{ color: t.muted }}>{new Date(r.created_at).toLocaleDateString()}</td>
                   <td style={{ color: t.muted }}>{r.size || "—"}</td>
                   <td style={{ color: r.ready ? t.green : t.amber }}>{r.ready ? "Ready" : "Processing"}</td>
-                  <td>{r.ready && (
-                    <button onClick={() => viewReport(r.id, r.title)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px" }}>⬇ View</button>
-                  )}</td>
+                  <td style={{ display: "flex", gap: 6, alignItems: "center", padding: "10px 0" }}>
+                    {r.ready && (
+                      <button onClick={() => viewReport(r.id, r.title)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px" }}>⬇ View</button>
+                    )}
+                    <button onClick={() => deleteReport(r.id)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px", color: t.red, borderColor: t.red }}>🗑 Delete</button>
+                  </td>
                 </tr>
               ))}
               {list.length === 0 && (
@@ -1273,8 +1285,7 @@ function AgentNav({ screen, setScreen, name, onLogout }) {
                 {icon} {label}
               </button>
             ))}
-            <div style={{ padding: "12px 20px", borderTop: `1px solid ${t.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ color: t.muted, fontSize: 13 }}>👋 {name}</span>
+            <div style={{ padding: "12px 20px", borderTop: `1px solid ${t.border}`, display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
               <button onClick={onLogout} style={{ ...S.ghost, fontSize: 12 }}>Logout</button>
             </div>
           </div>
@@ -1295,13 +1306,11 @@ function AgentNav({ screen, setScreen, name, onLogout }) {
         </button>
       ))}
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ color: t.muted, fontSize: 13 }}>👋 {name}</span>
         <button onClick={onLogout} style={{ ...S.ghost, fontSize: 12 }}>Logout</button>
       </div>
     </nav>
   );
 }
-
 
 // ── Agent Dashboard ──────────────────────────────────────────────
 function AgentDashboard({ name, setScreen: setScreenProp }) {
@@ -1528,6 +1537,7 @@ function AgentVoiceCall() {
   const [duration,     setDuration]     = useState(0);
   const [muted,        setMuted]        = useState(false);
   const [transcript,   setTranscript]   = useState([]);
+  const [liveSpeaking, setLiveSpeaking] = useState(null); // { partial, full } while customer TTS plays
   const [statusMsg,    setStatusMsg]    = useState("Ready to connect");
   const [sessionData,  setSessionData]  = useState(null);
   const [auditResult,  setAuditResult]  = useState("");
@@ -1546,6 +1556,10 @@ function AgentVoiceCall() {
   const micStreamRef     = useRef(null);
   const audioCtxRef      = useRef(null);   // Web Audio context for mixing
   const mixDestRef       = useRef(null);   // MediaStreamDestination (mic + TTS mixed)
+  const currentSrcRef    = useRef(null);   // Current AudioBufferSource — stopped when call ends
+  const speakIntervalRef    = useRef(null);   // Word-reveal interval for live transcript
+  const liveSpeakingRef    = useRef(null);   // Mirrors liveSpeaking — lets endCall commit partially-heard text
+  const customerGenderRef  = useRef("female"); // Fixed gender for the entire call — set once in startCall
 
   useEffect(() => {
     agents.me().then(r => setAgentInfo(r.data)).catch(() => {});
@@ -1554,8 +1568,11 @@ function AgentVoiceCall() {
 
   useEffect(() => () => {
     clearInterval(timerRef.current);
+    clearInterval(speakIntervalRef.current);
     try { recognitionRef.current?.abort(); } catch {}
     window.speechSynthesis?.cancel();
+    try { currentSrcRef.current?.stop(); } catch {}
+    currentSrcRef.current = null;
     try { if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop(); } catch {}
     micStreamRef.current?.getTracks().forEach(tr => tr.stop());
     audioCtxRef.current?.close().catch(() => {});
@@ -1566,19 +1583,45 @@ function AgentVoiceCall() {
   const fmt = s => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
   const now  = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+  // startWordReveal: animates text word-by-word into liveSpeaking over audioDurationMs.
+  // When the actual audio ends (onDone fires), the interval is already done or gets
+  // cleared, and the caller commits the full text to the permanent transcript.
+  const startWordReveal = (text, audioDurationMs) => {
+    clearInterval(speakIntervalRef.current);
+    const words = text.split(" ");
+    // Reserve ~10% extra time at the start before first word appears (natural delay)
+    const delayMs   = Math.min(800, audioDurationMs * 0.20);
+    const msPerWord = Math.max(200, (audioDurationMs * 0.95) / words.length);
+    let revealed = 0;
+    liveSpeakingRef.current = { partial: "", full: text };
+    setLiveSpeaking({ partial: "", full: text });
+    const tick = () => {
+      revealed++;
+      const ls = { partial: words.slice(0, revealed).join(" "), full: text };
+      liveSpeakingRef.current = ls;
+      setLiveSpeaking(ls);
+      if (revealed >= words.length) clearInterval(speakIntervalRef.current);
+    };
+    speakIntervalRef.current = setTimeout(() => {
+      speakIntervalRef.current = setInterval(tick, msPerWord);
+    }, delayMs);
+  };
+
   // Speak customer text through the Web Audio mix so the MediaRecorder captures
   // both the agent mic AND the customer TTS in one recording file.
-  // Falls back to window.speechSynthesis (mic-only recording) if the backend
-  // TTS endpoint is unavailable.
+  // Falls back to window.speechSynthesis if the backend TTS endpoint is unavailable.
+  // gender is chosen once per speak() call so each customer turn can vary.
   const speak = (text, onDone) => {
-    const ctx  = audioCtxRef.current;
-    const dest = mixDestRef.current;
+    const ctx    = audioCtxRef.current;
+    const dest   = mixDestRef.current;
     const apiUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
     const token  = localStorage.getItem("token") || "";
+    // Randomly assign male or female for this customer turn
+    const gender = customerGenderRef.current; // constant for the whole call — set in startCall
 
     if (ctx && dest) {
       // ── Web Audio path: fetch MP3 from backend, decode, route through mixer ──
-      fetch(`${apiUrl}/simulation/tts?text=${encodeURIComponent(text)}`, {
+      fetch(`${apiUrl}/simulation/tts?text=${encodeURIComponent(text)}&gender=${gender}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(r => r.arrayBuffer())
@@ -1588,40 +1631,69 @@ function AgentVoiceCall() {
           src.buffer = decoded;
           src.connect(ctx.destination); // speakers — agent hears the customer
           src.connect(dest);            // recording mix — captured in the audio file
-          src.onended = () => onDone?.();
+          currentSrcRef.current = src;
+          // Start live word-by-word transcript reveal synced to actual audio length
+          startWordReveal(text, decoded.duration * 1000);
+          src.onended = () => {
+            currentSrcRef.current = null;
+            clearInterval(speakIntervalRef.current);
+            liveSpeakingRef.current = null;
+            setLiveSpeaking(null);
+            onDone?.();
+          };
           src.start();
         })
         .catch(() => {
-          // Backend TTS failed (network error, quota, etc.) — fall back to
-          // speechSynthesis so the call flow is never broken.
+          // Backend TTS failed — fall back to speechSynthesis.
+          // Estimate duration from word count (~150 wpm) for the word-reveal.
+          const estMs = (text.split(" ").length / 150) * 60000;
+          startWordReveal(text, estMs);
           const synth = window.speechSynthesis;
           synth.cancel();
           const utt = new SpeechSynthesisUtterance(text);
-          utt.rate = 0.95; utt.pitch = 1.1;
+          utt.rate = 0.90; utt.pitch = gender === "male" ? 0.85 : 1.0;
           const voices = synth.getVoices();
-          const pick = voices.find(v => /Zira|Susan|Karen|Samantha|female/i.test(v.name));
+          const inIN = voices.filter(v => /en.?IN/i.test(v.lang));
+          const pick = (gender === "male"
+            ? inIN.find(v => /Prabhat|Ravi|Hemant/i.test(v.name)) || voices.find(v => /Ravi|Hemant|David|Mark|James/i.test(v.name))
+            : inIN.find(v => /Neerja|Heera|Kalpana|Lekha/i.test(v.name)) || voices.find(v => /Heera|Kalpana|Neerja|Zira|Susan|Karen|Samantha/i.test(v.name))
+          ) || inIN[0];
           if (pick) utt.voice = pick;
-          utt.onend  = () => onDone?.();
-          utt.onerror = () => onDone?.();
+          utt.onend  = () => { clearInterval(speakIntervalRef.current); liveSpeakingRef.current = null; setLiveSpeaking(null); onDone?.(); };
+          utt.onerror = () => { clearInterval(speakIntervalRef.current); liveSpeakingRef.current = null; setLiveSpeaking(null); onDone?.(); };
           synth.speak(utt);
         });
     } else {
       // ── Fallback path (AudioContext not ready) ──
+      const estMs = (text.split(" ").length / 150) * 60000;
+      startWordReveal(text, estMs);
       const synth = window.speechSynthesis;
       synth.cancel();
       const utt = new SpeechSynthesisUtterance(text);
-      utt.rate = 0.95; utt.pitch = 1.1;
+      utt.rate = 0.90; utt.pitch = gender === "male" ? 0.85 : 1.0;
       const voices = synth.getVoices();
-      const pick = voices.find(v => /Zira|Susan|Karen|Samantha|female/i.test(v.name));
+      const inIN = voices.filter(v => /en.?IN/i.test(v.lang));
+      const pick = (gender === "male"
+        ? inIN.find(v => /Prabhat|Ravi|Hemant/i.test(v.name)) || voices.find(v => /Ravi|Hemant|David|Mark|James/i.test(v.name))
+        : inIN.find(v => /Neerja|Heera|Kalpana|Lekha/i.test(v.name)) || voices.find(v => /Heera|Kalpana|Neerja|Zira|Susan|Karen|Samantha/i.test(v.name))
+      ) || inIN[0];
       if (pick) utt.voice = pick;
-      utt.onend  = () => onDone?.();
-      utt.onerror = () => onDone?.();
+      utt.onend  = () => { clearInterval(speakIntervalRef.current); liveSpeakingRef.current = null; setLiveSpeaking(null); onDone?.(); };
+      utt.onerror = () => { clearInterval(speakIntervalRef.current); liveSpeakingRef.current = null; setLiveSpeaking(null); onDone?.(); };
       synth.speak(utt);
     }
   };
 
   const startListening = () => {
-    if (!isActiveRef.current || isMutedRef.current) return;
+    if (!isActiveRef.current) return;
+    if (isMutedRef.current) {
+      // Customer has finished speaking but mic is muted. Advance to "listening"
+      // state visually so that when the agent unmutes, toggleMute sees
+      // callState === "listening" and immediately starts recognition.
+      setCallState("listening");
+      setStatusMsg("🔇 Muted — unmute your mic to speak");
+      return;
+    }
     setCallState("listening");
     setStatusMsg("🎤 Your turn — speak now...");
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1639,10 +1711,16 @@ function AgentVoiceCall() {
       try {
         const r = await simulation.turn({ scenario_id: sessionRef.current.scenario.id, agent_text: text, history: historyRef.current });
         const reply = r.data.customer_text;
-        historyRef.current = [...historyRef.current, { role: "customer", text: reply }];
-        setTranscript(prev => [...prev, { role: "customer", text: reply, time: now() }]);
+        // Do NOT add customer turn to history/transcript yet — wait until
+        // speak() finishes so the transcript only shows what was actually heard.
         setStatusMsg("🔊 Customer speaking...");
-        speak(reply, () => { if (isActiveRef.current) startListening(); });
+        speak(reply, () => {
+          // Guard: call may have been ended while customer was speaking.
+          if (!isActiveRef.current) return;
+          historyRef.current = [...historyRef.current, { role: "customer", text: reply }];
+          setTranscript(prev => [...prev, { role: "customer", text: reply, time: now() }]);
+          startListening();
+        });
       } catch { if (isActiveRef.current) startListening(); }
     };
 
@@ -1660,6 +1738,7 @@ function AgentVoiceCall() {
       setDuration(0);
       timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
       isActiveRef.current = true;
+      customerGenderRef.current = Math.random() < 0.5 ? "female" : "male"; // fixed for this call
 
       // ── Start mixed recording (agent mic + customer TTS) ──
       // We create a Web Audio context with a MediaStreamDestination as the
@@ -1689,10 +1768,17 @@ function AgentVoiceCall() {
       } catch { /* mic unavailable — continue without recording */ }
 
       const opening = r.data.opening_message;
-      historyRef.current = [{ role: "customer", text: opening }];
-      setTranscript([{ role: "customer", text: opening, time: now() }]);
+      // Start with empty history/transcript — the opening turn is only committed
+      // once speech finishes, so early end-call doesn't capture unheard text.
+      historyRef.current = [];
+      setTranscript([]);
       setCallState("speaking"); setStatusMsg("🔊 Customer speaking — listen carefully...");
-      const doSpeak = () => speak(opening, () => { if (isActiveRef.current) startListening(); });
+      const doSpeak = () => speak(opening, () => {
+        if (!isActiveRef.current) return;
+        historyRef.current = [{ role: "customer", text: opening }];
+        setTranscript([{ role: "customer", text: opening, time: now() }]);
+        startListening();
+      });
       if (window.speechSynthesis.getVoices().length === 0) {
         window.speechSynthesis.addEventListener("voiceschanged", doSpeak, { once: true });
       } else { doSpeak(); }
@@ -1707,6 +1793,19 @@ function AgentVoiceCall() {
   const endCall = async () => {
     isActiveRef.current = false;
     try { recognitionRef.current?.abort(); } catch {}
+    // Stop any in-flight customer TTS (Web Audio path)
+    try { currentSrcRef.current?.stop(); } catch {}
+    currentSrcRef.current = null;
+    // Cancel word-reveal — commit whatever was partially heard to the transcript
+    // so the supervisor audit record reflects what the customer actually said.
+    clearInterval(speakIntervalRef.current);
+    const partialSpoken = liveSpeakingRef.current?.partial?.trim();
+    if (partialSpoken) {
+      historyRef.current = [...historyRef.current, { role: "customer", text: partialSpoken }];
+      setTranscript(prev => [...prev, { role: "customer", text: partialSpoken, time: now() }]);
+    }
+    liveSpeakingRef.current = null;
+    setLiveSpeaking(null);
     window.speechSynthesis.cancel();
     clearInterval(timerRef.current);
     setCallState("ending"); setStatusMsg("⏳ Submitting for audit...");
@@ -1828,7 +1927,7 @@ function AgentVoiceCall() {
             {isLive && <Tag label="● LIVE" color={t.red} />}
           </div>
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-            {transcript.length === 0 && <div style={{ color: t.muted, textAlign: "center", marginTop: 60 }}>Transcript appears here as the call progresses</div>}
+            {transcript.length === 0 && !liveSpeaking && <div style={{ color: t.muted, textAlign: "center", marginTop: 60 }}>Transcript appears here as the call progresses</div>}
             {transcript.map((m, i) => (
               <div key={i} style={{ display: "flex", justifyContent: m.role === "agent" ? "flex-end" : "flex-start" }}>
                 <div style={{ maxWidth: "75%", padding: "10px 14px", borderRadius: 10, background: m.role === "agent" ? t.green + "22" : t.surface2, border: `1px solid ${m.role === "agent" ? t.green + "44" : t.border}`, fontSize: 13, lineHeight: 1.5 }}>
@@ -1837,6 +1936,19 @@ function AgentVoiceCall() {
                 </div>
               </div>
             ))}
+            {/* Live word-by-word customer turn — only visible while TTS is playing */}
+            {liveSpeaking && (
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <div style={{ maxWidth: "75%", padding: "10px 14px", borderRadius: 10, background: t.surface2, border: `1px solid ${t.border}`, fontSize: 13, lineHeight: 1.5 }}>
+                  <div style={{ color: t.muted, fontSize: 10, fontWeight: 700, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                    🤖 CUSTOMER
+                    <span style={{ color: t.red, fontSize: 9, animation: "pulse 1s infinite" }}>● LIVE</span>
+                  </div>
+                  {liveSpeaking.partial}
+                  <span style={{ display: "inline-block", width: 7, height: 13, background: t.text, borderRadius: 1, marginLeft: 2, verticalAlign: "middle", animation: "blink 0.8s step-end infinite" }} />
+                </div>
+              </div>
+            )}
           </div>
           {(callState === "ended" || callState === "ending") && (
             <div style={{ marginTop: 14, padding: 14, background: t.green + "10", borderRadius: 8, border: `1px solid ${t.green}33`, color: t.green, fontSize: 13, textAlign: "center" }}>

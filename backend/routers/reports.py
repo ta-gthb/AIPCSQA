@@ -365,3 +365,23 @@ async def download_report(report_id: str, db: AsyncSession = Depends(get_db),
 		raise HTTPException(404, "Report not ready or not found")
 	return FileResponse(report.file_path,
 						filename=os.path.basename(report.file_path))
+
+@router.delete("/{report_id}")
+async def delete_report(report_id: str, db: AsyncSession = Depends(get_db),
+						_: User = Depends(current_user)):
+	try:
+		rid = uuid.UUID(report_id)
+	except ValueError:
+		raise HTTPException(400, "Invalid report_id")
+	report = await db.get(Report, rid)
+	if not report:
+		raise HTTPException(404, "Report not found")
+	# Remove the file from disk if present
+	if report.file_path and os.path.exists(report.file_path):
+		try:
+			os.remove(report.file_path)
+		except OSError:
+			pass
+	await db.delete(report)
+	await db.commit()
+	return {"ok": True}

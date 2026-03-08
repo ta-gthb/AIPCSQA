@@ -80,16 +80,22 @@ async def simulation_turn(
 
 @router.get("/tts")
 async def text_to_speech(
-    text: str = Query(..., max_length=500),
+    text:   str = Query(..., max_length=500),
+    gender: str = Query("female", regex="^(male|female)$"),
     _: User = Depends(current_user),
 ):
     """
-    Convert text to speech (MP3) so the browser can play customer voice
-    through the Web Audio API and capture it in the mixed recording.
+    Convert text to speech (MP3) using Microsoft Edge TTS neural voices.
+    gender=female → en-IN-NeerjaNeural  (Indian English, female)
+    gender=male   → en-IN-PrabhatNeural  (Indian English, male)
     """
-    from gtts import gTTS
+    import edge_tts
+    voice = "en-IN-NeerjaNeural" if gender == "female" else "en-IN-PrabhatNeural"
+    communicate = edge_tts.Communicate(text=text, voice=voice)
     buf = io.BytesIO()
-    gTTS(text=text, lang="en", slow=False).write_to_fp(buf)
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            buf.write(chunk["data"])
     buf.seek(0)
     return StreamingResponse(
         buf,
