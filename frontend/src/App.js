@@ -735,6 +735,14 @@ function SupervisorReports() {
     } catch { alert("Could not load report data"); }
   };
 
+  const viewReportPdf = async (id) => {
+    try {
+      const r = await reports.viewPdf(id);
+      const url = URL.createObjectURL(r.data);
+      window.open(url, "_blank");
+    } catch { alert("Could not generate PDF report"); }
+  };
+
   const deleteReport = async (id) => {
     if (!window.confirm("Delete this report? This cannot be undone.")) return;
     try {
@@ -835,7 +843,10 @@ function SupervisorReports() {
                   <div style={{ color: t.muted, fontSize: 11, marginBottom: 6 }}>{r.agent_name || "—"} · {new Date(r.created_at).toLocaleDateString()}</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     {r.ready && (
-                      <button onClick={() => viewReport(r.id, r.title)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px" }}>⬇ View</button>
+                      <>
+                        <button onClick={() => viewReportPdf(r.id)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px", color: t.blue, borderColor: t.blue }}>📄 PDF</button>
+                        <button onClick={() => viewReport(r.id, r.title)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px" }}>⬇ View</button>
+                      </>
                     )}
                     <button onClick={() => deleteReport(r.id)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px", color: t.red, borderColor: t.red }}>🗑 Delete</button>
                   </div>
@@ -861,7 +872,10 @@ function SupervisorReports() {
                   <td style={{ color: r.ready ? t.green : t.amber }}>{r.ready ? "Ready" : "Processing"}</td>
                   <td style={{ display: "flex", gap: 6, alignItems: "center", padding: "10px 0" }}>
                     {r.ready && (
-                      <button onClick={() => viewReport(r.id, r.title)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px" }}>⬇ View</button>
+                      <>
+                        <button onClick={() => viewReportPdf(r.id)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px", color: t.blue, borderColor: t.blue }}>📄 PDF</button>
+                        <button onClick={() => viewReport(r.id, r.title)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px" }}>⬇ View</button>
+                      </>
                     )}
                     <button onClick={() => deleteReport(r.id)} style={{ ...S.ghost, fontSize: 11, padding: "4px 10px", color: t.red, borderColor: t.red }}>🗑 Delete</button>
                   </td>

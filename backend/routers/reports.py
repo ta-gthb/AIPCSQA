@@ -1,6 +1,6 @@
 import os, uuid, json as json_mod
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from pydantic import BaseModel
@@ -385,3 +385,145 @@ async def delete_report(report_id: str, db: AsyncSession = Depends(get_db),
 	await db.delete(report)
 	await db.commit()
 	return {"ok": True}
+
+@router.get("/{report_id}/pdf")
+async def download_report_pdf(report_id: str, db: AsyncSession = Depends(get_db),
+							   _: User = Depends(current_user)):
+	try:
+		rid = uuid.UUID(report_id)
+	except ValueError:
+		raise HTTPException(400, "Invalid report_id")
+	report = await db.get(Report, rid)
+	if not report or not report.file_path:
+		raise HTTPException(404, "Report not ready or not found")
+	
+	# Load the JSON report data
+	try:
+		with open(report.file_path) as f:
+			data = json_mod.load(f)
+	except Exception:
+		raise HTTPException(500, "Could not read report data")
+	
+	# Generate PDF using reportlab
+	from io import BytesIO
+	from reportlab.lib.pagesizes import letter, A4
+	from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+	from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+	from reportlab.lib.units import inch
+	from reportlab.lib import colors
+	
+	buffer = BytesIO()
+	doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+	story = []
+	styles = getSampleStyleSheet()
+	
+	# Custom title style
+	title_style = ParagraphStyle(
+		name='CustomTitle',
+		parent=styles['Heading1'],
+		fontSize=20,
+		textColor=colors.HexColor('#1a1a1a'),
+		spaceAfter=12,
+		spaceBefore=0
+	)
+	heading_style = ParagraphStyle(
+		name='CustomHeading',
+		parent=styles['Heading2'],
+		fontSize=14,
+		textColor=colors.HexColor('#333333'),
+		spaceAfter=8,
+		spaceBefore=12
+	)
+	
+	# Title
+	title = data.get('title', 'Report')
+	story.append(Paragraph(title, title_style))
+	story.append(Spacer(1, 0.2*inch))
+	
+	# Report metadata
+	metadata = []
+	if data.get('agent'):
+		agent = data['agent']
+		metadata.append(f"<b>Agent:</b> {agent.get('name', 'Unknown')}")
+	if data.get('generated_at'):
+		metadata.append(f"<b>Generated:</b> {data['generated_at'][:10]}")
+	if metadata:
+		for m in metadata:
+			story.append(Paragraph(m, styles['Normal']))
+		story.append(Spacer(1, 0.15*inch))
+	
+	# Scorecard section
+	if 'scorecard' in data:
+		sc = data['scorecard']
+		story.append(Paragraph("Scorecard", heading_style))
+		table_data = [['Dimension', 'Score', 'Grade', 'Status']]
+		for dim, info in sc.get('dimensions', {}).items():
+			status = '✓ Pass' if info.get('passed') else '✗ Fail'
+			table_data.append([
+				dim.replace('_', ' ').title(),
+				f"{info.get('score', 0):.1f}/10",
+				info.get('grade', 'N/A'),
+				status
+			])
+		t = Table(table_data, colWidths=[2*inch, 1.2*inch, 0.8*inch, 1*inch])
+		t.setStyle(TableStyle([
+			('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e0e0e0')),
+			('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+			('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+			('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+			('FONTSIZE', (0, 0), (-1, 0), 10),
+			('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+			('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#cccccc')),
+			('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9f9f9')]),
+		]))
+		story.append(t)
+		
+		overall = sc.get('overall_grade', 'N/A')
+		story.append(Spacer(1, 0.1*inch))
+		story.append(Paragraph(f"<b>Overall Grade: {overall}</b>", styles['Normal']))
+		story.append(Spacer(1, 0.2*inch))
+	
+	# Compliance section
+	if 'compliance' in data:
+		comp = data['compliance']
+		story.append(Paragraph("Compliance", heading_style))
+		story.append(Paragraph(f"<b>Compliance Rate:</b> {comp.get('compliance_rate', 0):.1f}%", styles['Normal']))
+		story.append(Paragraph(f"<b>Total Violations:</b> {comp.get('total_violations', 0)}", styles['Normal']))
+		story.append(Spacer(1, 0.2*inch))
+	
+	# Violations log (first 10)
+	if 'violations_log' in data and data['violations_log']:
+		violations = data['violations_log'][:10]
+		vtable_data = [['Type', 'Severity', 'Description']]
+		for v in violations:
+			vtable_data.append([
+				v.get('type', 'Unknown'),
+				v.get('severity', '—'),
+				v.get('description', '')[:80]
+			])
+		vt = Table(vtable_data, colWidths=[1.5*inch, 1*inch, 2.5*inch])
+		vt.setStyle(TableStyle([
+			('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ffebee')),
+			('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#c62828')),
+			('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+			('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+			('FONTSIZE', (0, 0), (-1, 0), 9),
+			('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#ffcccc')),
+			('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fff5f5')]),
+		]))
+		story.append(vt)
+		story.append(Spacer(1, 0.3*inch))
+	
+	# Supervisor comment
+	if data.get('supervisor_comment'):
+		story.append(Paragraph("Supervisor Comment", heading_style))
+		story.append(Paragraph(data['supervisor_comment'], styles['Normal']))
+	
+	doc.build(story)
+	buffer.seek(0)
+	
+	return StreamingResponse(
+		buffer,
+		media_type="application/pdf",
+		headers={"Content-Disposition": f"inline; filename=report-{report_id[:8]}.pdf"}
+	)
