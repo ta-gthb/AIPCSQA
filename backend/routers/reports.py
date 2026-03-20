@@ -406,16 +406,25 @@ async def download_report_pdf(report_id: str, db: AsyncSession = Depends(get_db)
 	
 	# Generate PDF using reportlab
 	from io import BytesIO
-	from reportlab.lib.pagesizes import letter, A4
-	from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+	from html import escape
+	from reportlab.lib.pagesizes import letter
+	from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 	from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 	from reportlab.lib.units import inch
 	from reportlab.lib import colors
 	
 	buffer = BytesIO()
-	doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+	doc = SimpleDocTemplate(
+		buffer,
+		pagesize=letter,
+		topMargin=0.5 * inch,
+		bottomMargin=0.5 * inch,
+		leftMargin=0.6 * inch,
+		rightMargin=0.6 * inch,
+	)
 	story = []
 	styles = getSampleStyleSheet()
+	content_width = doc.width
 	
 	# Custom title style
 	title_style = ParagraphStyle(
@@ -433,6 +442,12 @@ async def download_report_pdf(report_id: str, db: AsyncSession = Depends(get_db)
 		textColor=colors.HexColor('#333333'),
 		spaceAfter=8,
 		spaceBefore=12
+	)
+	cell_style = ParagraphStyle(
+		name='TableCell',
+		parent=styles['Normal'],
+		fontSize=9,
+		leading=12,
 	)
 	
 	# Title
@@ -458,21 +473,29 @@ async def download_report_pdf(report_id: str, db: AsyncSession = Depends(get_db)
 		story.append(Paragraph("Scorecard", heading_style))
 		table_data = [['Dimension', 'Score', 'Grade', 'Status']]
 		for dim, info in sc.get('dimensions', {}).items():
-			status = '✓ Pass' if info.get('passed') else '✗ Fail'
+			status = 'Pass' if info.get('passed') else 'Fail'
 			table_data.append([
-				dim.replace('_', ' ').title(),
+				Paragraph(escape(dim.replace('_', ' ').title()), cell_style),
 				f"{info.get('score', 0):.1f}/10",
 				info.get('grade', 'N/A'),
 				status
 			])
-		t = Table(table_data, colWidths=[2*inch, 1.2*inch, 0.8*inch, 1*inch])
+		t = Table(
+			table_data,
+			colWidths=[content_width * 0.42, content_width * 0.18, content_width * 0.16, content_width * 0.24],
+		)
 		t.setStyle(TableStyle([
 			('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e0e0e0')),
 			('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
 			('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+			('VALIGN', (0, 0), (-1, -1), 'TOP'),
 			('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
 			('FONTSIZE', (0, 0), (-1, 0), 10),
 			('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+			('TOPPADDING', (0, 0), (-1, -1), 6),
+			('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+			('LEFTPADDING', (0, 0), (-1, -1), 6),
+			('RIGHTPADDING', (0, 0), (-1, -1), 6),
 			('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#cccccc')),
 			('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9f9f9')]),
 		]))
@@ -497,17 +520,25 @@ async def download_report_pdf(report_id: str, db: AsyncSession = Depends(get_db)
 		vtable_data = [['Type', 'Severity', 'Description']]
 		for v in violations:
 			vtable_data.append([
-				v.get('type', 'Unknown'),
-				v.get('severity', '—'),
-				v.get('description', '')[:80]
+				Paragraph(escape(v.get('type', 'Unknown')), cell_style),
+				Paragraph(escape(v.get('severity', '-')), cell_style),
+				Paragraph(escape(v.get('description', '')), cell_style)
 			])
-		vt = Table(vtable_data, colWidths=[1.5*inch, 1*inch, 2.5*inch])
+		vt = Table(
+			vtable_data,
+			colWidths=[content_width * 0.24, content_width * 0.16, content_width * 0.60],
+		)
 		vt.setStyle(TableStyle([
 			('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ffebee')),
 			('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#c62828')),
 			('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+			('VALIGN', (0, 0), (-1, -1), 'TOP'),
 			('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
 			('FONTSIZE', (0, 0), (-1, 0), 9),
+			('TOPPADDING', (0, 0), (-1, -1), 6),
+			('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+			('LEFTPADDING', (0, 0), (-1, -1), 6),
+			('RIGHTPADDING', (0, 0), (-1, -1), 6),
 			('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#ffcccc')),
 			('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fff5f5')]),
 		]))
