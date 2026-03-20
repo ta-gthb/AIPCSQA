@@ -395,6 +395,7 @@ function SupervisorAgents() {
                 <div style={{ width: 40, height: 40, borderRadius: "50%", background: t.amber + "22", border: `2px solid ${t.amber}44`, display: "flex", alignItems: "center", justifyContent: "center", color: t.amber, fontWeight: 800 }}>{a.name?.[0]}</div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{a.name}</div>
+                  <div style={{ color: t.muted, fontSize: 12 }}>{a.email || "No email"}</div>
                   <div style={{ color: t.muted, fontSize: 12 }}>{a.team || "No team"}</div>
                   <div style={{ color: t.amber, fontSize: 12, fontWeight: 700, marginTop: 2 }}>Agent ID: {a.agent_id || <span style={{ color: t.red }}>Not set</span>}</div>
                   <div style={{ color: t.muted, fontSize: 11, marginTop: 2 }}>UUID: {a.id}</div>
