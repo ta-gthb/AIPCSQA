@@ -2110,6 +2110,22 @@ function AgentPerformance() {
 
   const downloadReportAsPDF = (r) => {
     const d = r.data || {};
+    const fmtDate = (value, withTime = false) => {
+      if (!value) return "";
+      const dt = new Date(value);
+      if (Number.isNaN(dt.getTime())) {
+        const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+        return String(value);
+      }
+      const dd = String(dt.getDate()).padStart(2, "0");
+      const mm = String(dt.getMonth() + 1).padStart(2, "0");
+      const yyyy = dt.getFullYear();
+      if (!withTime) return `${dd}-${mm}-${yyyy}`;
+      const hh = String(dt.getHours()).padStart(2, "0");
+      const min = String(dt.getMinutes()).padStart(2, "0");
+      return `${dd}-${mm}-${yyyy} ${hh}:${min}`;
+    };
     const typeLabel = (r.type || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
     const scoreColor = (s) => s >= 85 ? "#10B981" : s >= 70 ? "#F59E0B" : "#EF4444";
     const sevColor   = (s) => s === "Critical" || s === "High" ? "#EF4444" : s === "Medium" ? "#F59E0B" : "#6B7280";
@@ -2132,7 +2148,7 @@ function AgentPerformance() {
           <span><strong>Agent:</strong> ${d.agent.name || ""}</span>
           <span><strong>ID:</strong> ${d.agent.agent_id || "—"}</span>
           <span><strong>Team:</strong> ${d.agent.team || "—"}</span>
-          <span><strong>Period:</strong> ${d.date_from || ""} → ${d.date_to || ""}</span>
+          <span><strong>Period:</strong> ${fmtDate(d.date_from)} → ${fmtDate(d.date_to) || "—"}</span>
         </div>`;
     }
 
@@ -2272,7 +2288,7 @@ function AgentPerformance() {
           `<tr><td>${v.type || "—"}</td>
                <td style="color:${sevColor(v.severity)};font-weight:700">${v.severity || "—"}</td>
                <td>${v.description || "—"}</td>
-               <td style="color:#94A3B8">${v.date ? v.date.slice(0,10) : ""}</td></tr>`
+               <td style="color:#94A3B8">${fmtDate(v.date)}</td></tr>`
         ).join("");
         sections += `<div class="section"><div class="section-title">Violations Log</div>
           <table class="data-table">
@@ -2289,7 +2305,7 @@ function AgentPerformance() {
              <td style="text-transform:capitalize">${c.channel || ""}</td>
              <td style="font-weight:700;color:${scoreColor(c.score)}">${c.score != null ? Math.round(c.score) : "—"}</td>
              <td style="color:${c.passed ? "#10B981" : "#EF4444"}">${c.passed !== undefined ? (c.passed ? "✓ Pass" : "✗ Fail") : ""}</td>
-             <td style="color:#94A3B8">${c.date ? c.date.slice(0,10) : ""}</td></tr>`
+             <td style="color:#94A3B8">${fmtDate(c.date)}</td></tr>`
       ).join("");
       sections += `<div class="section"><div class="section-title">Call History in Report</div>
         <table class="data-table">
@@ -2344,15 +2360,15 @@ function AgentPerformance() {
     <span class="type-badge">${typeLabel}</span>
     <h1>${r.title}</h1>
     <div class="meta">
-      <span>Generated: ${new Date(r.created_at).toLocaleString()}</span>
-      ${d.date_from ? `<span>Period: ${d.date_from} → ${d.date_to || "—"}</span>` : ""}
+      <span>Generated: ${fmtDate(r.created_at, true)}</span>
+      ${d.date_from ? `<span>Period: ${fmtDate(d.date_from)} → ${fmtDate(d.date_to) || "—"}</span>` : ""}
       <span>Report ID: ${d.report_id || r.id}</span>
     </div>
   </div>
   ${sections}
   <div class="footer">
     <span>AIPCSQA · AI-Powered Customer Support Quality Auditor</span>
-    <span>Printed ${new Date().toLocaleDateString()}</span>
+    <span>Printed ${fmtDate(new Date())}</span>
   </div>
 </div>
 <script>window.onload = () => { window.print(); }</script>
