@@ -26,3 +26,15 @@ services:
         value: "50"
       - key: FRONTEND_URL
         sync: false          # Set to your Vercel URL, e.g. https://aipcsqa.vercel.app
+
+  - type: cron
+    name: aipcsqa-keepalive
+    runtime: python
+    region: oregon
+    schedule: "*/5 * * * *"
+    rootDir: backend
+    buildCommand: ""
+    startCommand: python -c "import os, urllib.request; url=os.getenv('BACKEND_HEALTH_URL','https://aipcsqa-backend.onrender.com/health'); print('Pinging', url); urllib.request.urlopen(url, timeout=20).read(); print('ok')"
+    envVars:
+      - key: BACKEND_HEALTH_URL
+        sync: false          # Optional override; default targets aipcsqa-backend /health
