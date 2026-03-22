@@ -2,8 +2,8 @@ name: Render Keepalive
 
 on:
   schedule:
-    # Every 10 minutes
-    - cron: "*/10 * * * *"
+    # Every 5 minutes
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
