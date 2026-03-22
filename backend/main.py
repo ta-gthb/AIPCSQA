@@ -29,22 +29,42 @@ def _resolve_self_ping_url() -> str:
 		return base if base.endswith("/health") else f"{base}/health"
 
 	render_external = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
-	if not render_external:
-		return ""
-	if render_external.startswith("http://") or render_external.startswith("https://"):
-		return f"{render_external}/health"
-	return f"https://{render_external}/health"
+	if render_external:
+		if render_external.startswith("http://") or render_external.startswith("https://"):
+			return f"{render_external}/health"
+		return f"https://{render_external}/health"
+
+	render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip().rstrip("/")
+	if render_host:
+		if render_host.startswith("http://") or render_host.startswith("https://"):
+			return f"{render_host}/health"
+		return f"https://{render_host}/health"
+
+	return ""
+
+
+def _should_enable_self_ping() -> bool:
+	"""Enable self-ping explicitly, or automatically when running on Render."""
+	if settings.SELF_PING_ENABLED:
+		return True
+	# Render always exposes one of these env vars for web services.
+	return bool(os.getenv("RENDER")) or bool(os.getenv("RENDER_SERVICE_ID"))
 
 
 async def _self_ping_worker(url: str, interval_seconds: int):
 	"""Periodically ping this service to keep it warm on hosts that allow it."""
-	while True:
-		try:
-			async with httpx.AsyncClient(timeout=10.0) as client:
-				await client.get(url)
-		except Exception as exc:
-			print(f"[self-ping] failed: {exc}")
-		await asyncio.sleep(interval_seconds)
+	client = httpx.AsyncClient(timeout=10.0, follow_redirects=True)
+	try:
+		while True:
+			try:
+				res = await client.get(url)
+				if res.status_code >= 400:
+					print(f"[self-ping] non-2xx status: {res.status_code}")
+			except Exception as exc:
+				print(f"[self-ping] failed: {exc}")
+			await asyncio.sleep(interval_seconds)
+	finally:
+		await client.aclose()
 
 app = FastAPI(
 	title="AIPCSQA API",
@@ -92,14 +112,14 @@ async def on_startup():
 			await session.commit()
 			print(f"Default supervisor created: {default_email} / {default_password}")
 
-	if settings.SELF_PING_ENABLED:
+	if _should_enable_self_ping():
 		url = _resolve_self_ping_url()
 		if url:
 			interval = max(60, int(settings.SELF_PING_INTERVAL_SECONDS))
 			_self_ping_task = asyncio.create_task(_self_ping_worker(url, interval))
 			print(f"[self-ping] enabled: {url} every {interval}s")
 		else:
-			print("[self-ping] enabled but URL not available; set SELF_PING_URL or RENDER_EXTERNAL_URL")
+			print("[self-ping] enabled but URL not available; set SELF_PING_URL or ensure RENDER_EXTERNAL_URL / RENDER_EXTERNAL_HOSTNAME exists")
 
 
 @app.on_event("shutdown")
