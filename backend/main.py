@@ -1,8 +1,11 @@
 import os
 import mimetypes
+import asyncio
+from contextlib import suppress
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import httpx
 from database import engine, Base
 from config import settings
 
@@ -15,6 +18,33 @@ mimetypes.add_type("audio/ogg",  ".ogg")
 from models import user, agent, call, transcript, audit, violation, report, message  # noqa
 
 from routers import auth, dashboard, agents, transcripts, compliance, reports, live_monitor, simulation
+
+_self_ping_task = None
+
+
+def _resolve_self_ping_url() -> str:
+	"""Resolve self-ping URL from explicit setting or Render hostname."""
+	if settings.SELF_PING_URL:
+		base = settings.SELF_PING_URL.strip().rstrip("/")
+		return base if base.endswith("/health") else f"{base}/health"
+
+	render_external = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+	if not render_external:
+		return ""
+	if render_external.startswith("http://") or render_external.startswith("https://"):
+		return f"{render_external}/health"
+	return f"https://{render_external}/health"
+
+
+async def _self_ping_worker(url: str, interval_seconds: int):
+	"""Periodically ping this service to keep it warm on hosts that allow it."""
+	while True:
+		try:
+			async with httpx.AsyncClient(timeout=10.0) as client:
+				await client.get(url)
+		except Exception as exc:
+			print(f"[self-ping] failed: {exc}")
+		await asyncio.sleep(interval_seconds)
 
 app = FastAPI(
 	title="AIPCSQA API",
@@ -33,6 +63,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def on_startup():
+	global _self_ping_task
 	async with engine.begin() as conn:
 		await conn.run_sync(Base.metadata.create_all)
 
@@ -60,6 +91,25 @@ async def on_startup():
 			session.add(user)
 			await session.commit()
 			print(f"Default supervisor created: {default_email} / {default_password}")
+
+	if settings.SELF_PING_ENABLED:
+		url = _resolve_self_ping_url()
+		if url:
+			interval = max(60, int(settings.SELF_PING_INTERVAL_SECONDS))
+			_self_ping_task = asyncio.create_task(_self_ping_worker(url, interval))
+			print(f"[self-ping] enabled: {url} every {interval}s")
+		else:
+			print("[self-ping] enabled but URL not available; set SELF_PING_URL or RENDER_EXTERNAL_URL")
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+	global _self_ping_task
+	if _self_ping_task:
+		_self_ping_task.cancel()
+		with suppress(asyncio.CancelledError):
+			await _self_ping_task
+		_self_ping_task = None
 
 app.include_router(auth.router)
 app.include_router(dashboard.router)
