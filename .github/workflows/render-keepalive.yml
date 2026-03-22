@@ -10,18 +10,24 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate keepalive URL is configured
+      - name: Resolve keepalive URL
+        id: resolve
         env:
-          KEEPALIVE_URL: ${{ secrets.RENDER_HEALTHCHECK_URL }}
+          SECRET_URL: ${{ secrets.RENDER_HEALTHCHECK_URL }}
         run: |
-          if [ -z "$KEEPALIVE_URL" ]; then
-            echo "RENDER_HEALTHCHECK_URL secret is not set."
-            exit 1
+          URL="$SECRET_URL"
+
+          # Fallback for this repository's Render service name.
+          if [ -z "$URL" ]; then
+            URL="https://aipcsqa-backend.onrender.com/health"
           fi
+
+          echo "keepalive_url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Using keepalive URL: $URL"
 
       - name: Ping Render health endpoint
         env:
-          KEEPALIVE_URL: ${{ secrets.RENDER_HEALTHCHECK_URL }}
+          KEEPALIVE_URL: ${{ steps.resolve.outputs.keepalive_url }}
         run: |
           echo "Pinging $KEEPALIVE_URL"
           curl --fail --show-error --silent \
