@@ -1,6 +1,6 @@
 # AIPCSQA — AI-Powered Customer Support Quality Auditor
 
-An end-to-end platform for automatically auditing call centre agent interactions. Supervisors get real-time transcription, AI-generated quality scores, compliance violation detection, and downloadable PDF reports. Agents can upload call recordings, run live practice simulations, generate performance reports, and message their supervisor — all from a single portal.
+An end-to-end AI-powered platform for any B2C enterprise or company to automatically audit the quality of customer support. In this platform Supervisors get real-time transcription of customer support agents' interaction, AI-generated quality scores, compliance violation detection, and downloadable PDF reports of customer support agents.
 
 ---
 
