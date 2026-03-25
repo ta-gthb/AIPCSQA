@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { auth, dashboard, agents, transcripts, compliance, reports, live, authExtra, simulation } from "./api";
+import { auth, dashboard, agents, transcripts, compliance, reports, live, authExtra, simulation, health } from "./api";
 
 // ── RESPONSIVE HOOK ──────────────────────────────────────────────
 function useMobile() {
@@ -42,6 +42,108 @@ function Bar({ value, max = 10, color }) {
   return (
     <div style={{ background: t.border, borderRadius: 4, height: 6, margin: "4px 0 10px" }}>
       <div style={{ width: `${(value / max) * 100}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.8s ease" }} />
+    </div>
+  );
+}
+
+// ── AUDIO PLAYER WITH HEALTH CHECK AND ERROR HANDLING ──────────
+function AudioPlayer({ filename, apiUrl }) {
+  const [isReady, setIsReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const audioRef = useRef(null);
+  
+  // Poll backend health until it's ready
+  useEffect(() => {
+    if (!filename) return;
+    
+    const checkHealth = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const isHealthy = await health.check();
+        if (isHealthy) {
+          setIsReady(true);
+          setIsLoading(false);
+          return;
+        }
+        // Wait before retrying (exponential backoff: 1s, 2s, 4s...)
+        await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, attempt), 5000)));
+      }
+      
+      // Backend is still not ready after retries
+      setIsLoading(false);
+      setError("Backend is starting up. Please try again in a moment.");
+    };
+    
+    checkHealth();
+  }, [filename]);
+  
+  const handleAudioError = () => {
+    setError("Failed to load audio. Try refreshing the page.");
+  };
+  
+  const handleRetry = async () => {
+    setIsLoading(true);
+    setError(null);
+    const isHealthy = await health.check();
+    if (isHealthy) {
+      setIsReady(true);
+      if (audioRef.current) audioRef.current.load();
+    } else {
+      setError("Backend is not responding. Please try again in a moment.");
+    }
+    setIsLoading(false);
+  };
+  
+  if (isLoading) {
+    return (
+      <div style={{ padding: "10px 16px", color: t.muted, fontSize: 12 }}>
+        <div style={{ fontSize: 11, color: t.muted, marginBottom: 4, fontWeight: 600 }}>AUDIO RECORDING</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: t.muted }}>
+          <div style={{ width: 16, height: 16, border: `2px solid ${t.border}`, borderTop: `2px solid ${t.blue}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          Backend is starting up...
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div style={{ padding: "10px 16px", color: t.muted, fontSize: 12 }}>
+        <div style={{ fontSize: 11, color: t.muted, marginBottom: 4, fontWeight: 600 }}>AUDIO RECORDING</div>
+        <div style={{ padding: 10, background: "#7F2C2C", borderRadius: 6, color: "#FCA5A5", fontSize: 12, marginBottom: 8 }}>
+          {error}
+        </div>
+        <button onClick={handleRetry} style={{ ...S.ghost, width: "100%", color: t.blue, borderColor: t.blue }}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+  
+  if (!isReady) {
+    return null;
+  }
+  
+  return (
+    <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
+      <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>AUDIO RECORDING</div>
+      <audio
+        ref={audioRef}
+        key={filename}
+        controls
+        style={{ width: "100%", height: 36 }}
+        onError={handleAudioError}
+      >
+        <source
+          src={`${apiUrl}/uploads/${filename}`}
+          type={filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
+        />
+        Your browser does not support audio playback.
+      </audio>
     </div>
   );
 }
@@ -550,23 +652,10 @@ function SupervisorAudit() {
           <div style={{ ...S.card, padding: 0, display: (isMobile && auditTab !== "transcript") ? "none" : "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 420 : "100%" }}>
             <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, fontWeight: 700 }}>{detail ? detail.call.ref : "Select a call"}</div>
             {detail?.call?.audio_filename && (
-              <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
-                <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>AUDIO RECORDING</div>
-                {/* key forces React to unmount+remount the <audio> element whenever
-                    the selected call changes, so the browser loads the new source
-                    instead of keeping the previous call's buffered audio. */}
-                <audio
-                  key={detail.call.audio_filename}
-                  controls
-                  style={{ width: "100%", height: 36 }}
-                >
-                  <source
-                    src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
-                    type={detail.call.audio_filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
-                  />
-                  Your browser does not support audio playback.
-                </audio>
-              </div>
+              <AudioPlayer 
+                filename={detail.call.audio_filename}
+                apiUrl={process.env.REACT_APP_API_URL || "http://localhost:8000"}
+              />
             )}
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
               {detail?.transcript?.turns?.map((turn, i) => {
