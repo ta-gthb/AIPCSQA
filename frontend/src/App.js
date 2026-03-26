@@ -685,6 +685,7 @@ function SupervisorAudit() {
   const [loading,    setLoading]    = useState(false);
   const [auditTab,   setAuditTab]   = useState("calls");
   const [audioReady, setAudioReady] = useState(false);
+  const [audioKey,   setAudioKey]   = useState(0);
 
   useEffect(() => {
     agents.list({ limit: 100 }).then(r => setAgentList(r.data)).catch(() => {}).finally(() => setLoadAgents(false));
@@ -700,6 +701,8 @@ function SupervisorAudit() {
   const selectCall = async (call) => {
     setSelected(call.call_id);
     if (isMobile) setAuditTab("transcript");
+    setAudioReady(false);
+    setAudioKey(k => k + 1);
     try { const r = await transcripts.get(call.call_id); setDetail(r.data); } catch {}
   };
 
@@ -777,7 +780,7 @@ function SupervisorAudit() {
               <div style={{ padding: "12px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
                 <div style={{ fontSize: 11, color: t.muted, marginBottom: 8, fontWeight: 600 }}>🎙️ AUDIO RECORDING</div>
                 <CustomAudioPlayer
-                  src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
+                  src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}?v=${audioKey}`}
                   isReady={audioReady}
                   onReady={setAudioReady}
                 />
