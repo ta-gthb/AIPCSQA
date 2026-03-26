@@ -3,6 +3,8 @@ import mimetypes
 import asyncio
 from contextlib import suppress
 from fastapi import FastAPI
+from fastapi import Request
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import httpx
@@ -143,6 +145,59 @@ app.include_router(simulation.router)
 # Serve uploaded recordings
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+
+
+@app.get("/uploads/{filename}")
+async def get_upload(filename: str, request: Request):
+	"""Serve uploaded audio with Range support for scrubbing/metadata.
+
+	StaticFiles does not reliably advertise/handle Range requests in all environments.
+	Many browsers will keep duration at 0:00 and disable seeking without Range.
+	"""
+	path = os.path.abspath(os.path.join(settings.UPLOAD_DIR, filename))
+	base = os.path.abspath(settings.UPLOAD_DIR)
+	if not path.startswith(base + os.sep):
+		return Response(status_code=400)
+	if not os.path.exists(path) or not os.path.isfile(path):
+		return Response(status_code=404)
+
+	file_size = os.path.getsize(path)
+	content_type, _ = mimetypes.guess_type(path)
+	content_type = content_type or "application/octet-stream"
+
+	range_header = request.headers.get("range")
+	if not range_header:
+		# Still include Accept-Ranges to hint seekability.
+		return FileResponse(path, media_type=content_type, headers={"Accept-Ranges": "bytes"})
+
+	# Parse: Range: bytes=start-end
+	# We only support a single range.
+	try:
+		units, rng = range_header.strip().split("=", 1)
+		if units != "bytes":
+			raise ValueError("unsupported units")
+		start_s, end_s = (rng.split("-", 1) + [""])[:2]
+		start = int(start_s) if start_s else 0
+		end = int(end_s) if end_s else file_size - 1
+		start = max(0, start)
+		end = min(file_size - 1, end)
+		if start > end:
+			raise ValueError("invalid range")
+	except Exception:
+		# Malformed range -> respond with full file (or could 416).
+		return FileResponse(path, media_type=content_type, headers={"Accept-Ranges": "bytes"})
+
+	length = end - start + 1
+	with open(path, "rb") as f:
+		f.seek(start)
+		data = f.read(length)
+
+	headers = {
+		"Content-Range": f"bytes {start}-{end}/{file_size}",
+		"Accept-Ranges": "bytes",
+		"Content-Length": str(length),
+	}
+	return Response(content=data, status_code=206, media_type=content_type, headers=headers)
 
 @app.get("/health")
 async def health():
