@@ -601,11 +601,10 @@ function SupervisorAudit() {
                     const toneColor = expr.tone === "positive" ? t.green : expr.tone === "negative" ? t.red : t.muted;
                     const profColor = expr.professionalism === "high" ? t.green : expr.professionalism === "low" ? t.red : t.amber;
                     const engageColor = expr.engagement === "high" ? t.green : expr.engagement === "low" ? t.red : t.amber;
-                    // Emoji mapping for expressions
+                    // Emoji mapping - expressions only (no tone duplicates)
                     const expressionEmoji = {
                       "helpful": "🤝", "empathetic": "💙", "patient": "⏳", "frustrated": "😤",
-                      "confused": "🤔", "professional": "💼", "enthusiastic": "🚀", "passive": "😐",
-                      "neutral": "😐", "positive": "😊", "negative": "😞"
+                      "confused": "🤔", "professional": "💼", "enthusiastic": "🚀", "passive": "😐"
                     };
                     const toneEmoji = { "positive": "😊", "negative": "😞", "neutral": "😐" };
                     const profEmoji = { "high": "⭐", "medium": "✓", "low": "⚠️" };
@@ -614,20 +613,22 @@ function SupervisorAudit() {
                     const currentTone = expr.tone || "neutral";
                     const currentProf = expr.professionalism || "medium";
                     const currentEngage = expr.engagement || "medium";
+                    // Determine if tone should be shown separately (avoid duplication with expression)
+                    const showTone = !["helpful", "empathetic", "patient", "frustrated", "confused", "professional", "enthusiastic", "passive"].includes(currentExpr);
                     return (
                       <div key={idx} style={{ marginBottom: 10, padding: 10, background: t.surface2, borderRadius: 8, border: `1px solid ${t.border}`, fontSize: 11 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: 20 }}>{expressionEmoji[currentExpr] || "😐"}</span>
+                            <span style={{ fontSize: 20 }}>{expressionEmoji[currentExpr] || toneEmoji[currentTone] || "😐"}</span>
                             <span style={{ color: t.amber, fontWeight: 700, fontSize: 12 }}>Turn #{idx + 1}</span>
                           </div>
                           <span style={{ color: t.muted, fontSize: 10 }}>{timeStr}</span>
                         </div>
                         <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-                          <Tag label={`${expressionEmoji[currentExpr] || "😐"} ${currentExpr}`} color={expr.tone === "positive" ? t.green : expr.tone === "negative" ? t.red : t.blue} />
-                          <Tag label={`${toneEmoji[currentTone] || "😐"} ${currentTone}`} color={toneColor} />
-                          <Tag label={`${profEmoji[currentProf] || "✓"} ${currentProf}`} color={profColor} />
-                          <Tag label={`${engageEmoji[currentEngage] || "▬"} ${currentEngage}`} color={engageColor} />
+                          {currentExpr && currentExpr !== "neutral" && <Tag label={`${expressionEmoji[currentExpr]} ${currentExpr}`} color={expr.tone === "positive" ? t.green : expr.tone === "negative" ? t.red : t.blue} />}
+                          {showTone && <Tag label={`${toneEmoji[currentTone]} ${currentTone}`} color={toneColor} />}
+                          <Tag label={`${profEmoji[currentProf]} ${currentProf}`} color={profColor} />
+                          <Tag label={`${engageEmoji[currentEngage]} ${currentEngage}`} color={engageColor} />
                         </div>
                         <div style={{ color: t.text, fontSize: 10, lineHeight: 1.4, maxHeight: 44, overflow: "hidden", background: t.surface, padding: 6, borderRadius: 4 }}>
                           {turn.text}
