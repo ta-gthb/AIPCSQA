@@ -627,8 +627,8 @@ function SupervisorAudit() {
                         <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
                           {currentExpr && currentExpr !== "neutral" && <Tag label={`${expressionEmoji[currentExpr]} ${currentExpr}`} color={expr.tone === "positive" ? t.green : expr.tone === "negative" ? t.red : t.blue} />}
                           {showTone && <Tag label={`${toneEmoji[currentTone]} ${currentTone}`} color={toneColor} />}
-                          <Tag label={`${profEmoji[currentProf]} ${currentProf}`} color={profColor} />
-                          <Tag label={`${engageEmoji[currentEngage]} ${currentEngage}`} color={engageColor} />
+                          <Tag label={`${profEmoji[currentProf]} Professionalism: ${currentProf}`} color={profColor} />
+                          <Tag label={`${engageEmoji[currentEngage]} Engagement: ${currentEngage}`} color={engageColor} />
                         </div>
                         <div style={{ color: t.text, fontSize: 10, lineHeight: 1.4, maxHeight: 44, overflow: "hidden", background: t.surface, padding: 6, borderRadius: 4 }}>
                           {turn.text}
