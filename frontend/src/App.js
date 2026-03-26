@@ -111,6 +111,48 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
     }
   }, [volume]);
 
+  // Handle src changes - load audio and capture duration
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !src) return;
+
+    // Reset state for new audio
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
+    onReady?.(false);
+
+    // Update src and trigger load
+    audio.src = src;
+    
+    // Use a small delay to ensure src is set before calling load()
+    const timeoutId = setTimeout(() => {
+      if (audio && audio.src) {
+        audio.load();
+        
+        // Fallback: check duration at intervals during loading
+        const checkInterval = setInterval(() => {
+          if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+            setDuration(audio.duration);
+            clearInterval(checkInterval);
+          }
+        }, 100);
+
+        // Stop checking after 5 seconds
+        const checkTimeoutId = setTimeout(() => {
+          clearInterval(checkInterval);
+        }, 5000);
+
+        return () => {
+          clearInterval(checkInterval);
+          clearTimeout(checkTimeoutId);
+        };
+      }
+    }, 50);
+
+    return () => clearTimeout(timeoutId);
+  }, [src, onReady]);
+
   const togglePlay = () => {
     if (!isReady) return;
     if (isPlaying) {
