@@ -461,6 +461,8 @@ function SupervisorAudit() {
   const [loadAgents, setLoadAgents] = useState(true);
   const [loading,    setLoading]    = useState(false);
   const [auditTab,   setAuditTab]   = useState("calls");
+  const audioRef     = useRef(null);
+  const [audioReady, setAudioReady] = useState(false);
 
   useEffect(() => {
     agents.list({ limit: 100 }).then(r => setAgentList(r.data)).catch(() => {}).finally(() => setLoadAgents(false));
@@ -472,6 +474,28 @@ function SupervisorAudit() {
     transcripts.list({ agent_id: selAgent.id, limit: 50 })
       .then(r => setList(r.data)).catch(() => {}).finally(() => setLoading(false));
   }, [selAgent]);
+
+  // Preload audio when detail changes
+  useEffect(() => {
+    setAudioReady(false);
+    if (audioRef.current && detail?.call?.audio_filename) {
+      const audio = audioRef.current;
+      const handleCanPlayThrough = () => {
+        setAudioReady(true);
+      };
+      const handleLoadStart = () => {
+        setAudioReady(false);
+      };
+      audio.addEventListener('canplaythrough', handleCanPlayThrough);
+      audio.addEventListener('loadstart', handleLoadStart);
+      // Trigger preload by setting the src
+      audio.load();
+      return () => {
+        audio.removeEventListener('canplaythrough', handleCanPlayThrough);
+        audio.removeEventListener('loadstart', handleLoadStart);
+      };
+    }
+  }, [detail?.call?.audio_filename]);
 
   const selectCall = async (call) => {
     setSelected(call.call_id);
@@ -551,14 +575,20 @@ function SupervisorAudit() {
             <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, fontWeight: 700 }}>{detail ? detail.call.ref : "Select a call"}</div>
             {detail?.call?.audio_filename && (
               <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
-                <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>AUDIO RECORDING</div>
+                <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>AUDIO RECORDING</span>
+                  {!audioReady && <span style={{ fontSize: 10, animation: "pulse 1.5s infinite" }}>⏳ Loading...</span>}
+                  {audioReady && <span style={{ fontSize: 10, color: t.green }}>✓ Ready</span>}
+                </div>
                 {/* key forces React to unmount+remount the <audio> element whenever
                     the selected call changes, so the browser loads the new source
                     instead of keeping the previous call's buffered audio. */}
                 <audio
+                  ref={audioRef}
                   key={detail.call.audio_filename}
                   controls
-                  style={{ width: "100%", height: 36 }}
+                  preload="auto"
+                  style={{ width: "100%", height: 36, opacity: audioReady ? 1 : 0.6 }}
                 >
                   <source
                     src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
