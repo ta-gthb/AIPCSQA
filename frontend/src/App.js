@@ -59,20 +59,45 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handleLoadedMetadata = () => setDuration(audio.duration);
+    const handleLoadedMetadata = () => {
+      if (audio.duration && !isNaN(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+    const handleDurationChange = () => {
+      if (audio.duration && !isNaN(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleEnded = () => setIsPlaying(false);
-    const handleCanPlayThrough = () => onReady?.(true);
-    const handleLoadStart = () => onReady?.(false);
+    const handleCanPlayThrough = () => {
+      if (audio.duration && !isNaN(audio.duration)) {
+        setDuration(audio.duration);
+      }
+      onReady?.(true);
+    };
+    const handleLoadStart = () => {
+      onReady?.(false);
+      setCurrentTime(0);
+      setDuration(0);
+    };
 
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("durationchange", handleDurationChange);
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("canplaythrough", handleCanPlayThrough);
     audio.addEventListener("loadstart", handleLoadStart);
 
+    // Also check if metadata is already loaded
+    if (audio.duration && !isNaN(audio.duration)) {
+      setDuration(audio.duration);
+    }
+
     return () => {
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("durationchange", handleDurationChange);
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("canplaythrough", handleCanPlayThrough);
