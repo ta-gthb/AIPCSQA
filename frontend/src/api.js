@@ -92,19 +92,4 @@ export const simulation = {
   turn:  (body)              => api.post("/simulation/turn", body),
 };
 
-// Health check without auth to determine if backend is ready
-export const health = {
-  check: async () => {
-    try {
-      const response = await axios.get(
-        `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/health`,
-        { timeout: 5000 }
-      );
-      return response.status === 200;
-    } catch (err) {
-      return false;
-    }
-  },
-};
-
 export default api;

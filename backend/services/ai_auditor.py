@@ -134,3 +134,72 @@ async def whisper_suggestion(turns: list[dict], current_turn: dict) -> str:
         ]
     )
     return response.choices[0].message.content.strip()
+
+
+async def enrich_turns_with_expressions(turns: list[dict]) -> list[dict]:
+	"""
+	Enrich agent turns with emotion/expression analysis.
+	For each agent turn, detects: tone (positive, neutral, negative), professionalism (high, medium, low), engagement (high, medium, low).
+	Preserves all existing turn fields (role, text, ts_start, ts_end).
+	"""
+	enriched = []
+	agent_turns = [(i, t) for i, t in enumerate(turns) if t.get("role") == "agent"]
+	
+	if not agent_turns:
+		return turns
+	
+	# Batch analyze agent turns
+	analysis_results = {}
+	for idx, turn in agent_turns:
+		text = turn.get("text", "").strip()
+		if not text:
+			analysis_results[idx] = {
+				"tone": "neutral",
+				"professionalism": "medium",
+				"engagement": "low",
+				"expression": "neutral"
+			}
+			continue
+		
+		prompt = f"""Analyze this agent response from a customer support call. Return ONLY valid JSON:
+{{
+  "tone": "positive" | "neutral" | "negative",
+  "professionalism": "high" | "medium" | "low",
+  "engagement": "high" | "medium" | "low",
+  "expression": "<one word emotion: helpful, empathetic, patient, frustrated, confused, professional, enthusiastic, passive>"
+}}
+
+Agent response: "{text}"
+
+Respond with ONLY the JSON object, no markdown or extra text."""
+		
+		try:
+			response = await client.chat.completions.create(
+				model="llama-3.3-70b-versatile",
+				max_tokens=100,
+				temperature=0.2,
+				messages=[
+					{"role": "system", "content": "You are an emotion and tone analyzer for customer support calls. Respond with only valid JSON."},
+					{"role": "user", "content": prompt},
+				]
+			)
+			raw = response.choices[0].message.content.strip()
+			result = json.loads(raw)
+			analysis_results[idx] = result
+		except Exception as e:
+			print(f"Error analyzing turn {idx}: {e}")
+			analysis_results[idx] = {
+				"tone": "neutral",
+				"professionalism": "medium",
+				"engagement": "medium",
+				"expression": "neutral"
+			}
+	
+	# Merge analysis into turns
+	for i, turn in enumerate(turns):
+		enriched_turn = turn.copy()
+		if i in analysis_results:
+			enriched_turn["expression"] = analysis_results[i]
+		enriched.append(enriched_turn)
+	
+	return enriched

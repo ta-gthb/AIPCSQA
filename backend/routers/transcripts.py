@@ -11,7 +11,7 @@ from models.transcript import Transcript
 from models.audit import AuditResult
 from models.violation import Violation, Severity
 from models.agent import Agent
-from services.ai_auditor import audit_transcript
+from services.ai_auditor import audit_transcript, enrich_turns_with_expressions
 from services.scoring import refresh_agent_stats
 from websocket_manager import manager
 from config import settings
@@ -101,6 +101,13 @@ async def _persist_audit(call_id: str, agent_id: str, turns: list[dict]):
 				))
 			call.status    = CallStatus.audited
 			call.sentiment = SentimentType(ai.get("sentiment", "neutral"))
+			
+			# Enrich transcript turns with emotion/expression analysis
+			enriched_turns = await enrich_turns_with_expressions(turns)
+			transcript = await db.scalar(select(Transcript).where(Transcript.call_id == call.id))
+			if transcript:
+				transcript.turns = enriched_turns
+			
 			await db.commit()
 			await refresh_agent_stats(agent_id, db)
 			await manager.broadcast_all({
