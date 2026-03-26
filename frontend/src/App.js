@@ -70,18 +70,23 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
 
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleEnded = () => setIsPlaying(false);
-    const handleDurationChange = () => {
+    
+    const handleMetadata = () => {
       setValidDuration(audio.duration);
     };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("ended", handleEnded);
-    audio.addEventListener("durationchange", handleDurationChange);
+    audio.addEventListener("loadedmetadata", handleMetadata);
+    audio.addEventListener("durationchange", handleMetadata);
+    audio.addEventListener("canplaythrough", handleMetadata);
 
     return () => {
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("durationchange", handleDurationChange);
+      audio.removeEventListener("loadedmetadata", handleMetadata);
+      audio.removeEventListener("durationchange", handleMetadata);
+      audio.removeEventListener("canplaythrough", handleMetadata);
     };
   }, []);
 
@@ -102,55 +107,47 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
     setIsPlaying(false);
     onReady?.(false);
 
-    // Directly set src without attribute binding
+    // Set src and load
     audio.src = src;
 
-    // Force metadata loading with play/pause and requestAnimationFrame polling
-    const loadAudio = async () => {
-      try {
-        // Call play to force browser to start loading
-        await audio.play();
-        // Immediately pause to stop playback
-        audio.pause();
-      } catch (e) {
-        // Ignore play errors
-      }
+    // Attempt 1: Try immediate duration check
+    if (audio.duration && audio.duration > 0) {
+      setValidDuration(audio.duration);
+      onReady?.(true);
+      return;
+    }
 
-      // Use requestAnimationFrame for most efficient polling
-      let isCleanedUp = false;
-      const pollDuration = () => {
-        if (isCleanedUp) return;
-        
+    // Attempt 2: Call load() to force metadata fetch
+    audio.load();
+
+    // Attempt 3: High-frequency polling with browser idle time
+    let lastDuration = 0;
+    let pollCount = 0;
+    const maxPolls = 200; // 200 * 50ms = 10 seconds max
+
+    const pollInterval = setInterval(() => {
+      pollCount++;
+      
+      // Check if duration changed
+      if (audio.duration !== lastDuration && audio.duration > 0) {
         if (setValidDuration(audio.duration)) {
+          clearInterval(pollInterval);
           onReady?.(true);
-        } else {
-          requestAnimationFrame(pollDuration);
+          return;
         }
-      };
+      }
+      lastDuration = audio.duration;
 
-      // Start polling
-      requestAnimationFrame(pollDuration);
+      // Stop polling after max attempts
+      if (pollCount >= maxPolls) {
+        clearInterval(pollInterval);
+        onReady?.(true); // Mark ready even if duration couldn't be determined
+      }
+    }, 50);
 
-      // Also set a timeout to stop polling after 5 seconds
-      const timeoutId = setTimeout(() => {
-        isCleanedUp = true;
-        if (duration === 0) {
-          onReady?.(true); // Mark ready even if duration couldn't be determined
-        }
-      }, 5000);
-
-      return () => {
-        isCleanedUp = true;
-        clearTimeout(timeoutId);
-      };
+    return () => {
+      clearInterval(pollInterval);
     };
-
-    // Delay slightly to ensure src is processed
-    const timeoutId = setTimeout(() => {
-      loadAudio();
-    }, 25);
-
-    return () => clearTimeout(timeoutId);
   }, [src, onReady]);
 
   const togglePlay = () => {
