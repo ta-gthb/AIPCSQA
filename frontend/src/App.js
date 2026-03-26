@@ -68,43 +68,22 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handleLoadedMetadata = () => {
-      setValidDuration(audio.duration);
-    };
+    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleEnded = () => setIsPlaying(false);
     const handleDurationChange = () => {
       setValidDuration(audio.duration);
     };
-    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const handleEnded = () => setIsPlaying(false);
-    const handleCanPlayThrough = () => {
-      setValidDuration(audio.duration);
-      onReady?.(true);
-    };
-    const handleLoadStart = () => {
-      onReady?.(false);
-      setCurrentTime(0);
-      setDuration(0);
-    };
 
-    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audio.addEventListener("durationchange", handleDurationChange);
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("ended", handleEnded);
-    audio.addEventListener("canplaythrough", handleCanPlayThrough);
-    audio.addEventListener("loadstart", handleLoadStart);
-
-    // Check if metadata is already loaded
-    setValidDuration(audio.duration);
+    audio.addEventListener("durationchange", handleDurationChange);
 
     return () => {
-      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audio.removeEventListener("durationchange", handleDurationChange);
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("canplaythrough", handleCanPlayThrough);
-      audio.removeEventListener("loadstart", handleLoadStart);
+      audio.removeEventListener("durationchange", handleDurationChange);
     };
-  }, [onReady]);
+  }, []);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -123,32 +102,53 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
     setIsPlaying(false);
     onReady?.(false);
 
-    // Update src and trigger load
+    // Directly set src without attribute binding
     audio.src = src;
-    
-    // Use a small delay to ensure src is set before calling load()
-    const timeoutId = setTimeout(() => {
-      if (audio && audio.src) {
-        audio.load();
-        
-        // Fallback: check duration at intervals during loading
-        const checkInterval = setInterval(() => {
-          if (setValidDuration(audio.duration)) {
-            clearInterval(checkInterval);
-          }
-        }, 100);
 
-        // Stop checking after 5 seconds
-        const checkTimeoutId = setTimeout(() => {
-          clearInterval(checkInterval);
-        }, 5000);
-
-        return () => {
-          clearInterval(checkInterval);
-          clearTimeout(checkTimeoutId);
-        };
+    // Force metadata loading with play/pause and requestAnimationFrame polling
+    const loadAudio = async () => {
+      try {
+        // Call play to force browser to start loading
+        await audio.play();
+        // Immediately pause to stop playback
+        audio.pause();
+      } catch (e) {
+        // Ignore play errors
       }
-    }, 50);
+
+      // Use requestAnimationFrame for most efficient polling
+      let isCleanedUp = false;
+      const pollDuration = () => {
+        if (isCleanedUp) return;
+        
+        if (setValidDuration(audio.duration)) {
+          onReady?.(true);
+        } else {
+          requestAnimationFrame(pollDuration);
+        }
+      };
+
+      // Start polling
+      requestAnimationFrame(pollDuration);
+
+      // Also set a timeout to stop polling after 5 seconds
+      const timeoutId = setTimeout(() => {
+        isCleanedUp = true;
+        if (duration === 0) {
+          onReady?.(true); // Mark ready even if duration couldn't be determined
+        }
+      }, 5000);
+
+      return () => {
+        isCleanedUp = true;
+        clearTimeout(timeoutId);
+      };
+    };
+
+    // Delay slightly to ensure src is processed
+    const timeoutId = setTimeout(() => {
+      loadAudio();
+    }, 25);
 
     return () => clearTimeout(timeoutId);
   }, [src, onReady]);
@@ -182,7 +182,7 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 0" }}>
-      <audio ref={audioRef} src={src} preload="auto" />
+      <audio ref={audioRef} preload="auto" />
       
       {/* Play/Pause Button + Progress */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
