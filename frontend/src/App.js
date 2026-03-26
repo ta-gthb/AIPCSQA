@@ -55,26 +55,29 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
   const [volume, setVolume] = useState(1);
   const [isHoveringProgress, setIsHoveringProgress] = useState(false);
 
+  // Helper to safely validate and set duration
+  const setValidDuration = (dur) => {
+    if (typeof dur === "number" && !isNaN(dur) && isFinite(dur) && dur > 0) {
+      setDuration(dur);
+      return true;
+    }
+    return false;
+  };
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const handleLoadedMetadata = () => {
-      if (audio.duration && !isNaN(audio.duration)) {
-        setDuration(audio.duration);
-      }
+      setValidDuration(audio.duration);
     };
     const handleDurationChange = () => {
-      if (audio.duration && !isNaN(audio.duration)) {
-        setDuration(audio.duration);
-      }
+      setValidDuration(audio.duration);
     };
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleEnded = () => setIsPlaying(false);
     const handleCanPlayThrough = () => {
-      if (audio.duration && !isNaN(audio.duration)) {
-        setDuration(audio.duration);
-      }
+      setValidDuration(audio.duration);
       onReady?.(true);
     };
     const handleLoadStart = () => {
@@ -90,10 +93,8 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
     audio.addEventListener("canplaythrough", handleCanPlayThrough);
     audio.addEventListener("loadstart", handleLoadStart);
 
-    // Also check if metadata is already loaded
-    if (audio.duration && !isNaN(audio.duration)) {
-      setDuration(audio.duration);
-    }
+    // Check if metadata is already loaded
+    setValidDuration(audio.duration);
 
     return () => {
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
@@ -132,8 +133,7 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
         
         // Fallback: check duration at intervals during loading
         const checkInterval = setInterval(() => {
-          if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
-            setDuration(audio.duration);
+          if (setValidDuration(audio.duration)) {
             clearInterval(checkInterval);
           }
         }, 100);
@@ -164,15 +164,17 @@ function CustomAudioPlayer({ src, isReady, onReady }) {
   };
 
   const handleProgressClick = (e) => {
-    if (!isReady) return;
+    if (!isReady || !duration || !isFinite(duration)) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
     const newTime = percent * duration;
-    audioRef.current.currentTime = newTime;
+    if (newTime >= 0 && newTime <= duration) {
+      audioRef.current.currentTime = newTime;
+    }
   };
 
   const formatTime = (sec) => {
-    if (!sec || isNaN(sec)) return "0:00";
+    if (typeof sec !== "number" || isNaN(sec) || !isFinite(sec) || sec < 0) return "0:00";
     const mins = Math.floor(sec / 60);
     const secs = Math.floor(sec % 60);
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
