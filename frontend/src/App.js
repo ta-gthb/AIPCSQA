@@ -46,6 +46,163 @@ function Bar({ value, max = 10, color }) {
   );
 }
 
+// ── CUSTOM AUDIO PLAYER ──────────────────────────────────────────
+function CustomAudioPlayer({ src, isReady, onReady }) {
+  const audioRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isHoveringProgress, setIsHoveringProgress] = useState(false);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleLoadedMetadata = () => setDuration(audio.duration);
+    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleEnded = () => setIsPlaying(false);
+    const handleCanPlayThrough = () => onReady?.(true);
+    const handleLoadStart = () => onReady?.(false);
+
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("canplaythrough", handleCanPlayThrough);
+    audio.addEventListener("loadstart", handleLoadStart);
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("canplaythrough", handleCanPlayThrough);
+      audio.removeEventListener("loadstart", handleLoadStart);
+    };
+  }, [onReady]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
+
+  const togglePlay = () => {
+    if (!isReady) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(() => {});
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleProgressClick = (e) => {
+    if (!isReady) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    const newTime = percent * duration;
+    audioRef.current.currentTime = newTime;
+  };
+
+  const formatTime = (sec) => {
+    if (!sec || isNaN(sec)) return "0:00";
+    const mins = Math.floor(sec / 60);
+    const secs = Math.floor(sec % 60);
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 0" }}>
+      <audio ref={audioRef} src={src} preload="auto" />
+      
+      {/* Play/Pause Button + Progress */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button
+          onClick={togglePlay}
+          disabled={!isReady}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: "50%",
+            background: isReady ? t.amber : t.border,
+            border: "none",
+            cursor: isReady ? "pointer" : "not-allowed",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 18,
+            color: "#000",
+            fontWeight: 700,
+            transition: "all 0.2s",
+            opacity: isReady ? 1 : 0.5,
+          }}
+        >
+          {!isReady ? "⏳" : isPlaying ? "⏸" : "▶"}
+        </button>
+
+        {/* Progress Bar */}
+        <div
+          onClick={handleProgressClick}
+          onMouseEnter={() => setIsHoveringProgress(true)}
+          onMouseLeave={() => setIsHoveringProgress(false)}
+          style={{
+            flex: 1,
+            height: isHoveringProgress ? 6 : 4,
+            background: t.border,
+            borderRadius: 2,
+            cursor: isReady ? "pointer" : "default",
+            position: "relative",
+            transition: "height 0.2s",
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${duration ? (currentTime / duration) * 100 : 0}%`,
+              background: t.amber,
+              borderRadius: 2,
+              transition: isHoveringProgress ? "none" : "width 0.1s",
+            }}
+          />
+        </div>
+
+        {/* Time Display */}
+        <div style={{ fontSize: 11, color: t.muted, minWidth: 45, textAlign: "right", fontWeight: 600 }}>
+          {formatTime(currentTime)} / {formatTime(duration)}
+        </div>
+      </div>
+
+      {/* Volume Control */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 12, color: t.muted }}>🔊</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={volume * 100}
+          onChange={(e) => setVolume(e.target.value / 100)}
+          style={{
+            flex: 1,
+            height: 4,
+            background: t.border,
+            borderRadius: 2,
+            outline: "none",
+            WebkitAppearance: "none",
+            appearance: "none",
+            cursor: "pointer",
+          }}
+        />
+        <span style={{ fontSize: 11, color: t.muted, minWidth: 20 }}>{Math.round(volume * 100)}%</span>
+      </div>
+
+      {/* Loading Status */}
+      <div style={{ fontSize: 10, color: isReady ? t.green : t.muted, textAlign: "center" }}>
+        {isReady ? "✓ Audio Ready" : "⏳ Loading Audio..."}
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════
 //  LOGIN
 // ════════════════════════════════════════════════════════════════
@@ -461,7 +618,6 @@ function SupervisorAudit() {
   const [loadAgents, setLoadAgents] = useState(true);
   const [loading,    setLoading]    = useState(false);
   const [auditTab,   setAuditTab]   = useState("calls");
-  const audioRef     = useRef(null);
   const [audioReady, setAudioReady] = useState(false);
 
   useEffect(() => {
@@ -474,55 +630,6 @@ function SupervisorAudit() {
     transcripts.list({ agent_id: selAgent.id, limit: 50 })
       .then(r => setList(r.data)).catch(() => {}).finally(() => setLoading(false));
   }, [selAgent]);
-
-  // Preload audio when detail changes
-  useEffect(() => {
-    setAudioReady(false);
-    if (audioRef.current && detail?.call?.audio_filename) {
-      const audio = audioRef.current;
-      let isCleanedUp = false;
-      
-      const handleCanPlayThrough = () => {
-        if (!isCleanedUp) setAudioReady(true);
-      };
-      const handleLoadStart = () => {
-        if (!isCleanedUp) setAudioReady(false);
-      };
-      const handleLoadedData = () => {
-        if (!isCleanedUp) setAudioReady(true);
-      };
-      
-      // Add event listeners
-      audio.addEventListener('canplaythrough', handleCanPlayThrough);
-      audio.addEventListener('loadstart', handleLoadStart);
-      audio.addEventListener('loadeddata', handleLoadedData);
-      
-      // Wait a tick to ensure src is set, then trigger aggressive preload
-      const timeoutId = setTimeout(() => {
-        if (!isCleanedUp && audio.src) {
-          audio.load();
-          // Play and immediately pause to force buffering (fallback strategy)
-          const playPromise = audio.play();
-          if (playPromise !== undefined) {
-            playPromise.then(() => {
-              audio.pause();
-            }).catch(() => {
-              // Ignore errors if play fails
-            });
-          }
-        }
-      }, 100);
-      
-      return () => {
-        isCleanedUp = true;
-        clearTimeout(timeoutId);
-        audio.removeEventListener('canplaythrough', handleCanPlayThrough);
-        audio.removeEventListener('loadstart', handleLoadStart);
-        audio.removeEventListener('loadeddata', handleLoadedData);
-        audio.pause();
-      };
-    }
-  }, [detail?.call?.audio_filename]);
 
   const selectCall = async (call) => {
     setSelected(call.call_id);
@@ -601,28 +708,13 @@ function SupervisorAudit() {
           <div style={{ ...S.card, padding: 0, display: (isMobile && auditTab !== "transcript") ? "none" : "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 420 : "100%" }}>
             <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, fontWeight: 700 }}>{detail ? detail.call.ref : "Select a call"}</div>
             {detail?.call?.audio_filename && (
-              <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
-                <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span>AUDIO RECORDING</span>
-                  {!audioReady && <span style={{ fontSize: 10, animation: "pulse 1.5s infinite" }}>⏳ Loading...</span>}
-                  {audioReady && <span style={{ fontSize: 10, color: t.green }}>✓ Ready</span>}
-                </div>
-                {/* key forces React to unmount+remount the <audio> element whenever
-                    the selected call changes, so the browser loads the new source
-                    instead of keeping the previous call's buffered audio. */}
-                <audio
-                  ref={audioRef}
-                  key={detail.call.audio_filename}
-                  controls
-                  preload="auto"
-                  style={{ width: "100%", height: 36, opacity: audioReady ? 1 : 0.6 }}
-                >
-                  <source
-                    src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
-                    type={detail.call.audio_filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
-                  />
-                  Your browser does not support audio playback.
-                </audio>
+              <div style={{ padding: "12px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
+                <div style={{ fontSize: 11, color: t.muted, marginBottom: 8, fontWeight: 600 }}>🎙️ AUDIO RECORDING</div>
+                <CustomAudioPlayer
+                  src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
+                  isReady={audioReady}
+                  onReady={setAudioReady}
+                />
               </div>
             )}
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
