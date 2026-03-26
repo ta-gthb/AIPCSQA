@@ -480,19 +480,46 @@ function SupervisorAudit() {
     setAudioReady(false);
     if (audioRef.current && detail?.call?.audio_filename) {
       const audio = audioRef.current;
+      let isCleanedUp = false;
+      
       const handleCanPlayThrough = () => {
-        setAudioReady(true);
+        if (!isCleanedUp) setAudioReady(true);
       };
       const handleLoadStart = () => {
-        setAudioReady(false);
+        if (!isCleanedUp) setAudioReady(false);
       };
+      const handleLoadedData = () => {
+        if (!isCleanedUp) setAudioReady(true);
+      };
+      
+      // Add event listeners
       audio.addEventListener('canplaythrough', handleCanPlayThrough);
       audio.addEventListener('loadstart', handleLoadStart);
-      // Trigger preload by setting the src
-      audio.load();
+      audio.addEventListener('loadeddata', handleLoadedData);
+      
+      // Wait a tick to ensure src is set, then trigger aggressive preload
+      const timeoutId = setTimeout(() => {
+        if (!isCleanedUp && audio.src) {
+          audio.load();
+          // Play and immediately pause to force buffering (fallback strategy)
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+            playPromise.then(() => {
+              audio.pause();
+            }).catch(() => {
+              // Ignore errors if play fails
+            });
+          }
+        }
+      }, 100);
+      
       return () => {
+        isCleanedUp = true;
+        clearTimeout(timeoutId);
         audio.removeEventListener('canplaythrough', handleCanPlayThrough);
         audio.removeEventListener('loadstart', handleLoadStart);
+        audio.removeEventListener('loadeddata', handleLoadedData);
+        audio.pause();
       };
     }
   }, [detail?.call?.audio_filename]);
