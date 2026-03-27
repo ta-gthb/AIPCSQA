@@ -60,6 +60,7 @@ function StudioAudioPlayer({ filename }) {
   const [bufferProgress, setBufferProgress] = useState(0);
 
   const mime = filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm";
+  const src = `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${filename}`;
 
   const fmt = (secs) => {
     if (!Number.isFinite(secs) || secs < 0) return "00:00";
@@ -103,8 +104,6 @@ function StudioAudioPlayer({ filename }) {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-
-    const src = `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${filename}`;
 
     setReady(false);
     setError("");
