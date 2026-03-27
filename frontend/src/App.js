@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { auth, dashboard, agents, transcripts, compliance, reports, live, authExtra, simulation } from "./api";
 
 // ── RESPONSIVE HOOK ──────────────────────────────────────────────
@@ -42,284 +42,6 @@ function Bar({ value, max = 10, color }) {
   return (
     <div style={{ background: t.border, borderRadius: 4, height: 6, margin: "4px 0 10px" }}>
       <div style={{ width: `${(value / max) * 100}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.8s ease" }} />
-    </div>
-  );
-}
-
-function StudioAudioPlayer({ filename }) {
-  console.log(`[StudioAudioPlayer] Rendered with filename:`, filename);
-  
-  // ✓ All hooks MUST be called unconditionally at top, NO early returns
-  const audioRef = useRef(null);
-  const analyserRef = useRef(null);
-  const dataArrayRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState("");
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [waveData, setWaveData] = useState(new Array(26).fill(20));
-  const [bufferProgress, setBufferProgress] = useState(0);
-
-  const mime = filename?.endsWith(".ogg") ? "audio/ogg" : "audio/webm";
-  const src = useMemo(
-    () => filename ? `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${filename}` : "",
-    [filename]
-  );
-
-  const fmt = (secs) => {
-    if (!Number.isFinite(secs) || secs < 0) return "00:00";
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  };
-
-  // Initialize Web Audio API for real waveform analysis
-  const initAudioContext = () => {
-    if (audioContextRef.current) return;
-    try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioCtx.createMediaElementAudioSource(audioRef.current);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyser.connect(audioCtx.destination);
-      audioContextRef.current = audioCtx;
-      analyserRef.current = analyser;
-      dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
-    } catch (e) {
-      console.warn("Web Audio API not available:", e);
-    }
-  };
-
-  // Update waveform bars from analyser frequency data
-  const updateWaveform = () => {
-    if (!analyserRef.current || !dataArrayRef.current) return;
-    analyserRef.current.getByteFrequencyData(dataArrayRef.current);
-    const data = dataArrayRef.current;
-    const newWave = Array.from({ length: 26 }).map((_, i) => {
-      const binStart = Math.floor((i / 26) * data.length);
-      const binEnd = Math.floor(((i + 1) / 26) * data.length);
-      const avgEnergy = data.slice(binStart, binEnd).reduce((a, b) => a + b, 0) / (binEnd - binStart);
-      return 18 + (avgEnergy / 255) * 82;
-    });
-    setWaveData(newWave);
-  };
-
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-
-    console.log(`[Audio Load] Starting for filename: ${filename}`);
-    console.log(`[Audio Load] URL: ${src}`);
-
-    setReady(false);
-    setError("");
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-
-    const onLoaded = () => {
-      console.log(`[Audio Event] loadedmetadata/canplay/durationchange fired`);
-      if (Number.isFinite(a.duration) && a.duration > 0) {
-        console.log(`[Audio Load] Duration detected: ${a.duration}s`);
-        setDuration(a.duration);
-        setReady(true);
-      }
-    };
-    const onTime = () => setCurrentTime(Number.isFinite(a.currentTime) ? a.currentTime : 0);
-    const onEnded = () => {
-      setIsPlaying(false);
-      setWaveData(new Array(26).fill(20));
-    };
-    const onErr = () => {
-      console.error(`[Audio Error] Error loading audio:`, a.error);
-      setError("Audio stream is unavailable right now.");
-      setReady(false);
-      setIsPlaying(false);
-    };
-    const onProgress = () => {
-      if (Number.isFinite(a.duration) && a.duration > 0) {
-        setDuration(a.duration);
-        if (a.buffered.length > 0) {
-          const bufferedEnd = a.buffered.end(a.buffered.length - 1);
-          const pct = (bufferedEnd / a.duration) * 100;
-          console.log(`[Audio Buffer] ${pct.toFixed(1)}% buffered`);
-          setBufferProgress(Math.min(pct, 100));
-          if (pct >= 90) {
-            console.log(`[Audio Ready] Buffer threshold reached`);
-            setReady(true);
-          }
-        }
-      }
-    };
-
-    a.addEventListener("loadedmetadata", onLoaded);
-    a.addEventListener("canplay", onLoaded);
-    a.addEventListener("durationchange", onLoaded);
-    a.addEventListener("progress", onProgress);
-    a.addEventListener("timeupdate", onTime);
-    a.addEventListener("ended", onEnded);
-    a.addEventListener("error", onErr);
-    
-    // Let React handle src via JSX <source> element, just trigger load
-    // Avoid setting a.src directly when using <source> elements
-    console.log(`[Audio Load] Calling load() to start buffering`);
-    a.load();
-
-    // Fallback: Poll for duration every 200ms for up to 5 seconds
-    const durationPoll = setInterval(() => {
-      if (Number.isFinite(a.duration) && a.duration > 0) {
-        console.log(`[Audio Poll] Duration detected via polling: ${a.duration}s`);
-        setDuration(a.duration);
-        setReady(true);
-        clearInterval(durationPoll);
-      }
-    }, 200);
-
-    return () => {
-      console.log(`[Audio Unmount] Cleaning up for filename: ${filename}`);
-      clearInterval(durationPoll);
-      a.removeEventListener("loadedmetadata", onLoaded);
-      a.removeEventListener("canplay", onLoaded);
-      a.removeEventListener("durationchange", onLoaded);
-      a.removeEventListener("progress", onProgress);
-      a.removeEventListener("timeupdate", onTime);
-      a.removeEventListener("ended", onEnded);
-      a.removeEventListener("error", onErr);
-    };
-  }, [src, filename]);
-
-  useEffect(() => {
-    if (!isPlaying || !analyserRef.current) return;
-    let rafId;
-    const animate = () => {
-      updateWaveform();
-      rafId = requestAnimationFrame(animate);
-    };
-    rafId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafId);
-  }, [isPlaying]);
-
-  const togglePlay = async () => {
-    const a = audioRef.current;
-    if (!a || (duration === 0 && !ready)) return;
-    setError("");
-    if (isPlaying) {
-      a.pause();
-      setIsPlaying(false);
-      return;
-    }
-    try {
-      initAudioContext();
-      await a.play();
-      setIsPlaying(true);
-    } catch (err) {
-      setError("Playback error. Check if file is loading. Try again.");
-      setIsPlaying(false);
-    }
-  };
-
-  const onSeek = (e) => {
-    const a = audioRef.current;
-    if (!a) return;
-    const next = Number(e.target.value);
-    a.currentTime = next;
-    setCurrentTime(next);
-  };
-
-  const progressMax = duration > 0 ? duration : 1;
-  const progressNow = currentTime > 0 ? currentTime : 0;
-
-  return !filename ? (
-    <div style={{ color: "#EF4444", fontSize: 13, padding: 12 }}>❌ No audio file associated with this call</div>
-  ) : (
-    <div style={{
-      border: `1px solid ${t.border}`,
-      borderRadius: 12,
-      padding: 12,
-      background: "linear-gradient(130deg,#111827 0%,#132138 48%,#1A2740 100%)",
-      boxShadow: "inset 0 0 0 1px rgba(245,158,11,0.08)",
-    }}>
-      <audio key={filename} ref={audioRef} preload="auto" crossOrigin="anonymous">
-        <source src={src} type={mime} />
-      </audio>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 28,
-            height: 28,
-            borderRadius: 99,
-            background: "radial-gradient(circle at 35% 35%,#FCD34D 0%,#F59E0B 45%,#B45309 100%)",
-            boxShadow: "0 0 0 2px rgba(245,158,11,0.2)",
-          }} />
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.1, color: t.amber }}>AUDIO STUDIO</div>
-            <div style={{ fontSize: 10, color: t.muted }}>Supervisor review playback</div>
-          </div>
-        </div>
-        <Tag label={ready ? "LIVE STREAM" : `BUFFERING ${Math.round(bufferProgress)}%`} color={ready ? t.green : t.amber} />
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-        <button
-          onClick={togglePlay}
-          disabled={!ready && duration === 0}
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 99,
-            border: "none",
-            cursor: (ready || duration > 0) ? "pointer" : "not-allowed",
-            background: (ready || duration > 0) ? "linear-gradient(145deg,#F59E0B,#D97706)" : t.border,
-            color: "#111827",
-            fontWeight: 900,
-            fontSize: 14,
-            boxShadow: (ready || duration > 0) ? "0 8px 20px rgba(245,158,11,0.28)" : "none",
-          }}
-          title={isPlaying ? "Pause" : "Play"}
-        >
-          {isPlaying ? "II" : ">"}
-        </button>
-
-        <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 3, height: 30 }}>
-          {Array.from({ length: 26 }).map((_, i) => {
-            const pct = isPlaying ? waveData[i] : 20 + ((i % 5) * 7);
-            return (
-              <div
-                key={i}
-                style={{
-                  width: 4,
-                  height: `${pct}%`,
-                  borderRadius: 4,
-                  background: i % 2 === 0 ? t.amber : t.blue,
-                  opacity: ready ? 0.95 : 0.45,
-                  transition: "height 100ms linear",
-                }}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      <input
-        type="range"
-        min={0}
-        max={progressMax}
-        step={0.1}
-        value={Math.min(progressNow, progressMax)}
-        onChange={onSeek}
-        disabled={!ready}
-        style={{ width: "100%", accentColor: t.amber, margin: "4px 0" }}
-      />
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 3 }}>
-        <span style={{ color: t.text, fontSize: 11, fontFamily: "monospace" }}>{fmt(currentTime)}</span>
-        <span style={{ color: t.muted, fontSize: 10 }}>{error || (ready ? "Click waveform slider to scrub" : "Preparing audio stream...")}</span>
-        <span style={{ color: t.text, fontSize: 11, fontFamily: "monospace" }}>{fmt(duration)}</span>
-      </div>
     </div>
   );
 }
@@ -830,7 +552,20 @@ function SupervisorAudit() {
             {detail?.call?.audio_filename && (
               <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
                 <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>AUDIO RECORDING</div>
-                <StudioAudioPlayer filename={detail.call.audio_filename} />
+                {/* key forces React to unmount+remount the <audio> element whenever
+                    the selected call changes, so the browser loads the new source
+                    instead of keeping the previous call's buffered audio. */}
+                <audio
+                  key={detail.call.audio_filename}
+                  controls
+                  style={{ width: "100%", height: 36 }}
+                >
+                  <source
+                    src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
+                    type={detail.call.audio_filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
+                  />
+                  Your browser does not support audio playback.
+                </audio>
               </div>
             )}
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
