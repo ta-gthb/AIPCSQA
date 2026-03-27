@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { auth, dashboard, agents, transcripts, compliance, reports, live, authExtra, simulation } from "./api";
 
 // ── RESPONSIVE HOOK ──────────────────────────────────────────────
