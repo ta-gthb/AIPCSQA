@@ -48,12 +48,15 @@ function Bar({ value, max = 10, color }) {
 
 function StudioAudioPlayer({ filename }) {
   const audioRef = useRef(null);
+  const analyserRef = useRef(null);
+  const dataArrayRef = useRef(null);
+  const audioContextRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [waveTick, setWaveTick] = useState(0);
+  const [waveData, setWaveData] = useState(new Array(26).fill(20));
 
   const src = `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${filename}`;
   const mime = filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm";
@@ -63,6 +66,38 @@ function StudioAudioPlayer({ filename }) {
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  // Initialize Web Audio API for real waveform analysis
+  const initAudioContext = () => {
+    if (audioContextRef.current) return;
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioCtx.createMediaElementAudioSource(audioRef.current);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      audioContextRef.current = audioCtx;
+      analyserRef.current = analyser;
+      dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
+    } catch (e) {
+      console.warn("Web Audio API not available:", e);
+    }
+  };
+
+  // Update waveform bars from analyser frequency data
+  const updateWaveform = () => {
+    if (!analyserRef.current || !dataArrayRef.current) return;
+    analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+    const data = dataArrayRef.current;
+    const newWave = Array.from({ length: 26 }).map((_, i) => {
+      const binStart = Math.floor((i / 26) * data.length);
+      const binEnd = Math.floor(((i + 1) / 26) * data.length);
+      const avgEnergy = data.slice(binStart, binEnd).reduce((a, b) => a + b, 0) / (binEnd - binStart);
+      return 18 + (avgEnergy / 255) * 82;
+    });
+    setWaveData(newWave);
   };
 
   useEffect(() => {
@@ -76,11 +111,16 @@ function StudioAudioPlayer({ filename }) {
     setDuration(0);
 
     const onLoaded = () => {
-      setDuration(Number.isFinite(a.duration) ? a.duration : 0);
-      setReady(true);
+      if (Number.isFinite(a.duration) && a.duration > 0) {
+        setDuration(a.duration);
+        setReady(true);
+      }
     };
     const onTime = () => setCurrentTime(Number.isFinite(a.currentTime) ? a.currentTime : 0);
-    const onEnded = () => setIsPlaying(false);
+    const onEnded = () => {
+      setIsPlaying(false);
+      setWaveData(new Array(26).fill(20));
+    };
     const onErr = () => {
       setError("Audio stream is unavailable right now.");
       setReady(false);
@@ -89,14 +129,26 @@ function StudioAudioPlayer({ filename }) {
 
     a.addEventListener("loadedmetadata", onLoaded);
     a.addEventListener("canplay", onLoaded);
+    a.addEventListener("durationchange", onLoaded);
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("ended", onEnded);
     a.addEventListener("error", onErr);
     a.load();
 
+    // Fallback: Poll for duration every 200ms for up to 5 seconds
+    const durationPoll = setInterval(() => {
+      if (Number.isFinite(a.duration) && a.duration > 0) {
+        setDuration(a.duration);
+        setReady(true);
+        clearInterval(durationPoll);
+      }
+    }, 200);
+
     return () => {
+      clearInterval(durationPoll);
       a.removeEventListener("loadedmetadata", onLoaded);
       a.removeEventListener("canplay", onLoaded);
+      a.removeEventListener("durationchange", onLoaded);
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("ended", onEnded);
       a.removeEventListener("error", onErr);
@@ -104,9 +156,14 @@ function StudioAudioPlayer({ filename }) {
   }, [filename]);
 
   useEffect(() => {
-    if (!isPlaying) return;
-    const id = setInterval(() => setWaveTick(v => v + 1), 140);
-    return () => clearInterval(id);
+    if (!isPlaying || !analyserRef.current) return;
+    let rafId;
+    const animate = () => {
+      updateWaveform();
+      rafId = requestAnimationFrame(animate);
+    };
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
   }, [isPlaying]);
 
   const togglePlay = async () => {
@@ -119,6 +176,7 @@ function StudioAudioPlayer({ filename }) {
       return;
     }
     try {
+      initAudioContext();
       await a.play();
       setIsPlaying(true);
     } catch {
@@ -190,8 +248,7 @@ function StudioAudioPlayer({ filename }) {
 
         <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 3, height: 30 }}>
           {Array.from({ length: 26 }).map((_, i) => {
-            const base = (Math.sin((waveTick + i) * 0.65) + 1) / 2;
-            const pct = isPlaying ? 18 + base * 82 : 20 + ((i % 5) * 7);
+            const pct = isPlaying ? waveData[i] : 20 + ((i % 5) * 7);
             return (
               <div
                 key={i}
@@ -201,7 +258,7 @@ function StudioAudioPlayer({ filename }) {
                   borderRadius: 4,
                   background: i % 2 === 0 ? t.amber : t.blue,
                   opacity: ready ? 0.95 : 0.45,
-                  transition: "height 120ms linear",
+                  transition: "height 100ms linear",
                 }}
               />
             );
