@@ -46,229 +46,6 @@ function Bar({ value, max = 10, color }) {
   );
 }
 
-// ── CUSTOM AUDIO PLAYER ──────────────────────────────────────────
-function CustomAudioPlayer({ src, isReady, onReady }) {
-  const audioRef = useRef(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isHoveringProgress, setIsHoveringProgress] = useState(false);
-
-  // Helper to safely validate and set duration
-  const setValidDuration = (dur) => {
-    if (typeof dur === "number" && !isNaN(dur) && isFinite(dur) && dur > 0) {
-      setDuration(dur);
-      return true;
-    }
-    return false;
-  };
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const handleEnded = () => setIsPlaying(false);
-    
-    const handleMetadata = () => {
-      setValidDuration(audio.duration);
-    };
-
-    audio.addEventListener("timeupdate", handleTimeUpdate);
-    audio.addEventListener("ended", handleEnded);
-    audio.addEventListener("loadedmetadata", handleMetadata);
-    audio.addEventListener("durationchange", handleMetadata);
-    audio.addEventListener("canplaythrough", handleMetadata);
-
-    return () => {
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("loadedmetadata", handleMetadata);
-      audio.removeEventListener("durationchange", handleMetadata);
-      audio.removeEventListener("canplaythrough", handleMetadata);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume;
-    }
-  }, [volume]);
-
-  // Handle src changes - load audio and capture duration
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !src) return;
-
-    // Reset state for new audio
-    setCurrentTime(0);
-    setDuration(0);
-    setIsPlaying(false);
-    onReady?.(false);
-
-    // Set src and load
-    audio.src = src;
-
-    // Attempt 1: Try immediate duration check
-    if (audio.duration && audio.duration > 0) {
-      setValidDuration(audio.duration);
-      onReady?.(true);
-      return;
-    }
-
-    // Attempt 2: Call load() to force metadata fetch
-    audio.load();
-
-    // Attempt 3: High-frequency polling with browser idle time
-    let lastDuration = 0;
-    let pollCount = 0;
-    const maxPolls = 200; // 200 * 50ms = 10 seconds max
-
-    const pollInterval = setInterval(() => {
-      pollCount++;
-      
-      // Check if duration changed
-      if (audio.duration !== lastDuration && audio.duration > 0) {
-        if (setValidDuration(audio.duration)) {
-          clearInterval(pollInterval);
-          onReady?.(true);
-          return;
-        }
-      }
-      lastDuration = audio.duration;
-
-      // Stop polling after max attempts
-      if (pollCount >= maxPolls) {
-        clearInterval(pollInterval);
-        onReady?.(true); // Mark ready even if duration couldn't be determined
-      }
-    }, 50);
-
-    return () => {
-      clearInterval(pollInterval);
-    };
-  }, [src, onReady]);
-
-  const togglePlay = () => {
-    if (!isReady) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch(() => {});
-    }
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleProgressClick = (e) => {
-    if (!isReady || !duration || !isFinite(duration)) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    const newTime = percent * duration;
-    if (newTime >= 0 && newTime <= duration) {
-      audioRef.current.currentTime = newTime;
-    }
-  };
-
-  const formatTime = (sec) => {
-    if (typeof sec !== "number" || isNaN(sec) || !isFinite(sec) || sec < 0) return "0:00";
-    const mins = Math.floor(sec / 60);
-    const secs = Math.floor(sec % 60);
-    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 0" }}>
-      <audio ref={audioRef} preload="auto" />
-      
-      {/* Play/Pause Button + Progress */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <button
-          onClick={togglePlay}
-          disabled={!isReady}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: "50%",
-            background: isReady ? t.amber : t.border,
-            border: "none",
-            cursor: isReady ? "pointer" : "not-allowed",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 18,
-            color: "#000",
-            fontWeight: 700,
-            transition: "all 0.2s",
-            opacity: isReady ? 1 : 0.5,
-          }}
-        >
-          {!isReady ? "⏳" : isPlaying ? "⏸" : "▶"}
-        </button>
-
-        {/* Progress Bar */}
-        <div
-          onClick={handleProgressClick}
-          onMouseEnter={() => setIsHoveringProgress(true)}
-          onMouseLeave={() => setIsHoveringProgress(false)}
-          style={{
-            flex: 1,
-            height: isHoveringProgress ? 6 : 4,
-            background: t.border,
-            borderRadius: 2,
-            cursor: isReady ? "pointer" : "default",
-            position: "relative",
-            transition: "height 0.2s",
-          }}
-        >
-          <div
-            style={{
-              height: "100%",
-              width: `${duration ? (currentTime / duration) * 100 : 0}%`,
-              background: t.amber,
-              borderRadius: 2,
-              transition: isHoveringProgress ? "none" : "width 0.1s",
-            }}
-          />
-        </div>
-
-        {/* Time Display */}
-        <div style={{ fontSize: 11, color: t.muted, minWidth: 45, textAlign: "right", fontWeight: 600 }}>
-          {formatTime(currentTime)} / {formatTime(duration)}
-        </div>
-      </div>
-
-      {/* Volume Control */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 12, color: t.muted }}>🔊</span>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={volume * 100}
-          onChange={(e) => setVolume(e.target.value / 100)}
-          style={{
-            flex: 1,
-            height: 4,
-            background: t.border,
-            borderRadius: 2,
-            outline: "none",
-            WebkitAppearance: "none",
-            appearance: "none",
-            cursor: "pointer",
-          }}
-        />
-        <span style={{ fontSize: 11, color: t.muted, minWidth: 20 }}>{Math.round(volume * 100)}%</span>
-      </div>
-
-      {/* Loading Status */}
-      <div style={{ fontSize: 10, color: isReady ? t.green : t.muted, textAlign: "center" }}>
-        {isReady ? "✓ Audio Ready" : "⏳ Loading Audio..."}
-      </div>
-    </div>
-  );
-}
-
 // ════════════════════════════════════════════════════════════════
 //  LOGIN
 // ════════════════════════════════════════════════════════════════
@@ -684,8 +461,6 @@ function SupervisorAudit() {
   const [loadAgents, setLoadAgents] = useState(true);
   const [loading,    setLoading]    = useState(false);
   const [auditTab,   setAuditTab]   = useState("calls");
-  const [audioReady, setAudioReady] = useState(false);
-  const [audioKey,   setAudioKey]   = useState(0);
 
   useEffect(() => {
     agents.list({ limit: 100 }).then(r => setAgentList(r.data)).catch(() => {}).finally(() => setLoadAgents(false));
@@ -701,8 +476,6 @@ function SupervisorAudit() {
   const selectCall = async (call) => {
     setSelected(call.call_id);
     if (isMobile) setAuditTab("transcript");
-    setAudioReady(false);
-    setAudioKey(k => k + 1);
     try { const r = await transcripts.get(call.call_id); setDetail(r.data); } catch {}
   };
 
@@ -777,13 +550,22 @@ function SupervisorAudit() {
           <div style={{ ...S.card, padding: 0, display: (isMobile && auditTab !== "transcript") ? "none" : "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 420 : "100%" }}>
             <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, fontWeight: 700 }}>{detail ? detail.call.ref : "Select a call"}</div>
             {detail?.call?.audio_filename && (
-              <div style={{ padding: "12px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
-                <div style={{ fontSize: 11, color: t.muted, marginBottom: 8, fontWeight: 600 }}>🎙️ AUDIO RECORDING</div>
-                <CustomAudioPlayer
-                  src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}?v=${audioKey}`}
-                  isReady={audioReady}
-                  onReady={setAudioReady}
-                />
+              <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
+                <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>AUDIO RECORDING</div>
+                {/* key forces React to unmount+remount the <audio> element whenever
+                    the selected call changes, so the browser loads the new source
+                    instead of keeping the previous call's buffered audio. */}
+                <audio
+                  key={detail.call.audio_filename}
+                  controls
+                  style={{ width: "100%", height: 36 }}
+                >
+                  <source
+                    src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
+                    type={detail.call.audio_filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
+                  />
+                  Your browser does not support audio playback.
+                </audio>
               </div>
             )}
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
