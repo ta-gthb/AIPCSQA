@@ -46,6 +46,189 @@ function Bar({ value, max = 10, color }) {
   );
 }
 
+function StudioAudioPlayer({ filename }) {
+  const audioRef = useRef(null);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState("");
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [waveTick, setWaveTick] = useState(0);
+
+  const src = `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${filename}`;
+  const mime = filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm";
+
+  const fmt = (secs) => {
+    if (!Number.isFinite(secs) || secs < 0) return "00:00";
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+
+    setReady(false);
+    setError("");
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+
+    const onLoaded = () => {
+      setDuration(Number.isFinite(a.duration) ? a.duration : 0);
+      setReady(true);
+    };
+    const onTime = () => setCurrentTime(Number.isFinite(a.currentTime) ? a.currentTime : 0);
+    const onEnded = () => setIsPlaying(false);
+    const onErr = () => {
+      setError("Audio stream is unavailable right now.");
+      setReady(false);
+      setIsPlaying(false);
+    };
+
+    a.addEventListener("loadedmetadata", onLoaded);
+    a.addEventListener("canplay", onLoaded);
+    a.addEventListener("timeupdate", onTime);
+    a.addEventListener("ended", onEnded);
+    a.addEventListener("error", onErr);
+    a.load();
+
+    return () => {
+      a.removeEventListener("loadedmetadata", onLoaded);
+      a.removeEventListener("canplay", onLoaded);
+      a.removeEventListener("timeupdate", onTime);
+      a.removeEventListener("ended", onEnded);
+      a.removeEventListener("error", onErr);
+    };
+  }, [filename]);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const id = setInterval(() => setWaveTick(v => v + 1), 140);
+    return () => clearInterval(id);
+  }, [isPlaying]);
+
+  const togglePlay = async () => {
+    const a = audioRef.current;
+    if (!a || !ready) return;
+    setError("");
+    if (isPlaying) {
+      a.pause();
+      setIsPlaying(false);
+      return;
+    }
+    try {
+      await a.play();
+      setIsPlaying(true);
+    } catch {
+      setError("Playback blocked by browser. Click again to resume.");
+      setIsPlaying(false);
+    }
+  };
+
+  const onSeek = (e) => {
+    const a = audioRef.current;
+    if (!a) return;
+    const next = Number(e.target.value);
+    a.currentTime = next;
+    setCurrentTime(next);
+  };
+
+  const progressMax = duration > 0 ? duration : 1;
+  const progressNow = currentTime > 0 ? currentTime : 0;
+
+  return (
+    <div style={{
+      border: `1px solid ${t.border}`,
+      borderRadius: 12,
+      padding: 12,
+      background: "linear-gradient(130deg,#111827 0%,#132138 48%,#1A2740 100%)",
+      boxShadow: "inset 0 0 0 1px rgba(245,158,11,0.08)",
+    }}>
+      <audio key={filename} ref={audioRef} preload="metadata">
+        <source src={src} type={mime} />
+      </audio>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{
+            width: 28,
+            height: 28,
+            borderRadius: 99,
+            background: "radial-gradient(circle at 35% 35%,#FCD34D 0%,#F59E0B 45%,#B45309 100%)",
+            boxShadow: "0 0 0 2px rgba(245,158,11,0.2)",
+          }} />
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.1, color: t.amber }}>AUDIO STUDIO</div>
+            <div style={{ fontSize: 10, color: t.muted }}>Supervisor review playback</div>
+          </div>
+        </div>
+        <Tag label={ready ? "LIVE STREAM" : "BUFFERING"} color={ready ? t.green : t.amber} />
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        <button
+          onClick={togglePlay}
+          disabled={!ready}
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 99,
+            border: "none",
+            cursor: ready ? "pointer" : "not-allowed",
+            background: ready ? "linear-gradient(145deg,#F59E0B,#D97706)" : t.border,
+            color: "#111827",
+            fontWeight: 900,
+            fontSize: 14,
+            boxShadow: ready ? "0 8px 20px rgba(245,158,11,0.28)" : "none",
+          }}
+          title={isPlaying ? "Pause" : "Play"}
+        >
+          {isPlaying ? "II" : ">"}
+        </button>
+
+        <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 3, height: 30 }}>
+          {Array.from({ length: 26 }).map((_, i) => {
+            const base = (Math.sin((waveTick + i) * 0.65) + 1) / 2;
+            const pct = isPlaying ? 18 + base * 82 : 20 + ((i % 5) * 7);
+            return (
+              <div
+                key={i}
+                style={{
+                  width: 4,
+                  height: `${pct}%`,
+                  borderRadius: 4,
+                  background: i % 2 === 0 ? t.amber : t.blue,
+                  opacity: ready ? 0.95 : 0.45,
+                  transition: "height 120ms linear",
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <input
+        type="range"
+        min={0}
+        max={progressMax}
+        step={0.1}
+        value={Math.min(progressNow, progressMax)}
+        onChange={onSeek}
+        disabled={!ready}
+        style={{ width: "100%", accentColor: t.amber, margin: "4px 0" }}
+      />
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 3 }}>
+        <span style={{ color: t.text, fontSize: 11, fontFamily: "monospace" }}>{fmt(currentTime)}</span>
+        <span style={{ color: t.muted, fontSize: 10 }}>{error || (ready ? "Click waveform slider to scrub" : "Preparing audio stream...")}</span>
+        <span style={{ color: t.text, fontSize: 11, fontFamily: "monospace" }}>{fmt(duration)}</span>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════
 //  LOGIN
 // ════════════════════════════════════════════════════════════════
@@ -552,20 +735,7 @@ function SupervisorAudit() {
             {detail?.call?.audio_filename && (
               <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
                 <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>AUDIO RECORDING</div>
-                {/* key forces React to unmount+remount the <audio> element whenever
-                    the selected call changes, so the browser loads the new source
-                    instead of keeping the previous call's buffered audio. */}
-                <audio
-                  key={detail.call.audio_filename}
-                  controls
-                  style={{ width: "100%", height: 36 }}
-                >
-                  <source
-                    src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
-                    type={detail.call.audio_filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
-                  />
-                  Your browser does not support audio playback.
-                </audio>
+                <StudioAudioPlayer filename={detail.call.audio_filename} />
               </div>
             )}
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
