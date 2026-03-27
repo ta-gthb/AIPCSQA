@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { auth, dashboard, agents, transcripts, compliance, reports, live, authExtra, simulation } from "./api";
 
 // ── RESPONSIVE HOOK ──────────────────────────────────────────────
@@ -54,7 +54,7 @@ function WaveformAudioPlayer({ src, mimeType }) {
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
 
-  const drawWaveform = () => {
+  const drawWaveform = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || peaks.length === 0) return;
     const ctx = canvas.getContext("2d");
@@ -78,17 +78,17 @@ function WaveformAudioPlayer({ src, mimeType }) {
       ctx.fillStyle = i <= progressIndex ? t.amber : t.border;
       ctx.fillRect(x, y, Math.max(1, barWidth * 0.8), barHeight);
     }
-  };
+  }, [peaks, currentTime, duration]);
 
   useEffect(() => {
     drawWaveform();
-  }, [peaks, currentTime, duration]);
+  }, [drawWaveform]);
 
   useEffect(() => {
     const onResize = () => drawWaveform();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [peaks, currentTime, duration]);
+  }, [drawWaveform]);
 
   useEffect(() => {
     if (!src) return undefined;
