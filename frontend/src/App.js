@@ -189,7 +189,7 @@ function StudioAudioPlayer({ filename }) {
       a.removeEventListener("ended", onEnded);
       a.removeEventListener("error", onErr);
     };
-  }, [src]);
+  }, [src, filename]);
 
   useEffect(() => {
     if (!isPlaying || !analyserRef.current) return;
