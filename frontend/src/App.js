@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
 import { auth, dashboard, agents, transcripts, compliance, reports, live, authExtra, simulation } from "./api";
 
 // ── RESPONSIVE HOOK ──────────────────────────────────────────────
@@ -44,6 +45,24 @@ function Bar({ value, max = 10, color }) {
       <div style={{ width: `${(value / max) * 100}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.8s ease" }} />
     </div>
   );
+}
+
+function calculateSpeakingTime(turns) {
+  let agentTime = 0;
+  let customerTime = 0;
+  
+  if (!turns || !Array.isArray(turns)) return { agentTime: 0, customerTime: 0, totalTime: 0 };
+  
+  turns.forEach(turn => {
+    const duration = (turn.ts_end || 0) - (turn.ts_start || 0);
+    if (turn.role === "agent") {
+      agentTime += duration;
+    } else if (turn.role === "customer") {
+      customerTime += duration;
+    }
+  });
+  
+  return { agentTime, customerTime, totalTime: agentTime + customerTime };
 }
 
 function WaveformAudioPlayer({ src, mimeType }) {
@@ -641,12 +660,12 @@ function SupervisorAudit() {
         <>
           {isMobile && (
             <div style={{ display: "flex", gap: 4, marginBottom: 12, background: t.surface2, borderRadius: 10, padding: 4, border: `1px solid ${t.border}`, overflowX: "auto" }}>
-              {[["calls","📋 Calls"],["transcript","💬 Transcript"],["expressions","😊 Expressions"],["audit","🔍 AI Audit"]].map(([key,label]) => (
+              {[["calls","📋 Calls"],["transcript","💬 Transcript"],["expressions","😊 Expressions"],["audit","🔍 AI Audit"],["time","⏱️ Time"]].map(([key,label]) => (
                 <button key={key} onClick={() => setAuditTab(key)} style={{ flex: 1, padding: "8px 4px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 12, fontWeight: auditTab === key ? 700 : 400, background: auditTab === key ? t.amber : "transparent", color: auditTab === key ? "#000" : t.muted, fontFamily: "inherit", transition: "all 0.15s", whiteSpace: "nowrap" }}>{label}</button>
               ))}
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "260px 1fr 280px 280px", gap: 16, height: isMobile ? "auto" : 560 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "260px 1fr 280px 280px 260px", gap: 16, height: isMobile ? "auto" : 560 }}>
           {/* Call list */}
           <div style={{ ...S.card, padding: 0, overflow: "hidden", display: (isMobile && auditTab !== "calls") ? "none" : "flex", flexDirection: "column", height: isMobile ? 380 : "100%" }}>
             <div style={{ padding: 14, borderBottom: `1px solid ${t.border}`, fontWeight: 700, fontSize: 14 }}>Calls — {selAgent.name}</div>
@@ -793,6 +812,52 @@ function SupervisorAudit() {
                   ))}
                 </>
               ) : <div style={{ color: t.muted, fontSize: 13 }}>Select a call to view AI audit</div>}
+            </div>
+          </div>
+
+          {/* Speaking Time Chart */}
+          <div style={{ ...S.card, padding: 0, display: (isMobile && auditTab !== "time") ? "none" : "flex", flexDirection: "column", overflow: "hidden", height: isMobile ? 420 : "100%" }}>
+            <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}`, fontWeight: 700, fontSize: 14 }}>⏱️ Speaking Time</div>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
+              {detail?.transcript?.turns ? (() => {
+                const { agentTime, customerTime, totalTime } = calculateSpeakingTime(detail.transcript.turns);
+                const pieData = [
+                  { name: "Agent", value: Math.round(agentTime * 10) / 10, fill: t.amber },
+                  { name: "Customer", value: Math.round(customerTime * 10) / 10, fill: t.blue }
+                ];
+                const agentPct = totalTime > 0 ? Math.round((agentTime / totalTime) * 100) : 0;
+                const custPct = totalTime > 0 ? Math.round((customerTime / totalTime) * 100) : 0;
+                
+                return (
+                  <>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <PieChart>
+                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value">
+                          {pieData.map((e, i) => (
+                            <Cell key={`cell-${i}`} fill={e.fill} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div style={{ marginTop: 12, textAlign: "center", width: "100%" }}>
+                      <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", fontSize: 11 }}>
+                        <div>
+                          <div style={{ color: t.amber, fontWeight: 700 }}>🎧 Agent</div>
+                          <div style={{ color: t.muted }}>{agentPct}% ({Math.round(agentTime)}s)</div>
+                        </div>
+                        <div>
+                          <div style={{ color: t.blue, fontWeight: 700 }}>👤 Customer</div>
+                          <div style={{ color: t.muted }}>{custPct}% ({Math.round(customerTime)}s)</div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 10, padding: 10, background: t.surface, borderRadius: 6, fontSize: 11 }}>
+                        <div style={{ color: t.muted, marginBottom: 4 }}>Total Duration</div>
+                        <div style={{ color: t.amber, fontWeight: 700, fontSize: 14 }}>{Math.round(totalTime)}s</div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })() : <div style={{ color: t.muted, fontSize: 13 }}>Select a call to view speaking time</div>}
             </div>
           </div>
         </div>
