@@ -65,6 +65,7 @@ export const transcripts = {
   list:             (params)         => api.get("/transcripts/", { params }),
   get:              (id)             => api.get(`/transcripts/${id}`),
   resolveViolation: (id)             => api.patch(`/transcripts/violations/${id}/resolve`),
+  getQuickResponses: (customerMessage) => api.post("/transcripts/quick-responses", null, { params: { customer_message: customerMessage } }),
 };
 
 export const compliance = {

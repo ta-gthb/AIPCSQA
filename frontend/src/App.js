@@ -1796,6 +1796,8 @@ function AgentVoiceCall() {
   const [agentInfo,    setAgentInfo]    = useState(null);
   const [speechOK,     setSpeechOK]     = useState(true);
   const [startErr,     setStartErr]     = useState("");
+  const [quickResponses, setQuickResponses] = useState([]);
+  const [loadingResponses, setLoadingResponses] = useState(false);
 
   const timerRef       = useRef(null);
   const recognitionRef = useRef(null);
@@ -1971,6 +1973,8 @@ function AgentVoiceCall() {
           if (!isActiveRef.current) return;
           historyRef.current = [...historyRef.current, { role: "customer", text: reply }];
           setTranscript(prev => [...prev, { role: "customer", text: reply, time: now() }]);
+          // Generate AI quick response suggestions based on customer's message
+          generateQuickResponses(reply);
           startListening();
         });
       } catch { if (isActiveRef.current) startListening(); }
@@ -2100,6 +2104,20 @@ function AgentVoiceCall() {
     else if (callState === "listening") startListening();
   };
 
+  // Generate AI quick response suggestions when customer finishes speaking
+  const generateQuickResponses = async (customerMessage) => {
+    setLoadingResponses(true);
+    try {
+      const res = await transcripts.getQuickResponses(customerMessage);
+      setQuickResponses(res.data.suggestions || []);
+    } catch (e) {
+      console.error("Failed to generate quick responses:", e);
+      setQuickResponses([]);
+    } finally {
+      setLoadingResponses(false);
+    }
+  };
+
   // ── Idle / starting screen ────────────────────────────────────
   if (callState === "idle" || callState === "starting") {
     return (
@@ -2205,6 +2223,66 @@ function AgentVoiceCall() {
           {(callState === "ended" || callState === "ending") && (
             <div style={{ marginTop: 14, padding: 14, background: t.green + "10", borderRadius: 8, border: `1px solid ${t.green}33`, color: t.green, fontSize: 13, textAlign: "center" }}>
               {auditResult || "⏳ Submitting call for AI quality audit..."}
+            </div>
+          )}
+          {/* Quick Response Suggestions Panel */}
+          {quickResponses.length > 0 && callState === "listening" && (
+            <div style={{ marginTop: 14, padding: 12, background: t.blue + "08", borderRadius: 8, border: `1px solid ${t.blue}33` }}>
+              <div style={{ color: t.blue, fontSize: 11, fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                💡 AI Suggested Responses {loadingResponses && <span style={{ fontSize: 9, color: t.muted }}>loading...</span>}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {quickResponses.map((resp, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      // Add suggestion to transcript as agent message
+                      historyRef.current = [...historyRef.current, { role: "agent", text: resp }];
+                      setTranscript(prev => [...prev, { role: "agent", text: resp, time: now() }]);
+                      setQuickResponses([]); // Clear suggestions after selection
+                      setCallState("speaking");
+                      setStatusMsg("🤖 Customer is responding...");
+                      // Trigger next customer turn
+                      simulation.turn({ scenario_id: sessionRef.current.scenario.id, agent_text: resp, history: historyRef.current })
+                        .then(r => {
+                          const customerReply = r.data.customer_text;
+                          setStatusMsg("🔊 Customer speaking...");
+                          speak(customerReply, () => {
+                            if (!isActiveRef.current) return;
+                            historyRef.current = [...historyRef.current, { role: "customer", text: customerReply }];
+                            setTranscript(prev => [...prev, { role: "customer", text: customerReply, time: now() }]);
+                            generateQuickResponses(customerReply);
+                            startListening();
+                          });
+                        })
+                        .catch(() => { if (isActiveRef.current) startListening(); });
+                    }}
+                    style={{
+                      padding: "10px 12px",
+                      backgroundColor: t.surface2,
+                      border: `1px solid ${t.blue}44`,
+                      borderRadius: 6,
+                      color: t.text,
+                      fontSize: 12,
+                      lineHeight: 1.4,
+                      cursor: "pointer",
+                      textAlign: "left",
+                      transition: "all 0.2s",
+                      hover: { backgroundColor: t.blue + "11", borderColor: t.blue + "66" }
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.backgroundColor = t.blue + "11";
+                      e.target.style.borderColor = t.blue + "66";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.backgroundColor = t.surface2;
+                      e.target.style.borderColor = t.blue + "44";
+                    }}
+                  >
+                    {resp}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

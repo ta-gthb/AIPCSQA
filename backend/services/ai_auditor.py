@@ -203,3 +203,66 @@ Respond with ONLY the JSON object, no markdown or extra text."""
 		enriched.append(enriched_turn)
 	
 	return enriched
+
+
+async def generate_quick_responses(customer_message: str, conversation_context: list[dict] = None) -> list[str]:
+	"""
+	Generate 3-4 contextual quick response suggestions for the agent based on customer message.
+	Uses the latest customer message and conversation context to produce relevant replies.
+	"""
+	if not customer_message or not customer_message.strip():
+		return []
+	
+	# Build context from recent conversation
+	context_text = ""
+	if conversation_context:
+		recent_turns = conversation_context[-6:]  # last 3 agent-customer exchanges
+		for turn in recent_turns:
+			role = turn.get("role", "unknown").upper()
+			text = turn.get("text", "")
+			context_text += f"\n[{role}]: {text}"
+	
+	prompt = f"""You are a helpful Flipkart customer support assistant. Based on the customer's message and conversation context, generate 3-4 SHORT, professional quick response suggestions that the agent can use immediately.
+
+These should be:
+- Concise (1-2 sentences each)
+- Professional and empathetic
+- Actionable replies that move the conversation forward
+- Compliant with Flipkart support policy
+
+CONVERSATION CONTEXT:{context_text}
+
+CUSTOMER'S LATEST MESSAGE: "{customer_message}"
+
+Return ONLY a JSON array of strings (the quick responses), nothing else. Example:
+["I understand your concern. Let me help you with that.", "Thank you for reporting this. I'll investigate immediately.", "I found a solution..."]
+"""
+	
+	try:
+		response = await client.chat.completions.create(
+			model="llama-3.3-70b-versatile",
+			max_tokens=500,
+			temperature=0.7,
+			messages=[
+				{
+					"role": "system", 
+					"content": "You are a customer support response suggestion engine. Generate helpful, professional quick responses. Return only valid JSON array."
+				},
+				{
+					"role": "user",
+					"content": prompt
+				}
+			]
+		)
+		raw = response.choices[0].message.content.strip()
+		# Clean up markdown wrapping if present
+		if raw.startswith("```"):
+			raw = raw.split("```")[1]
+			if raw.startswith("json"):
+				raw = raw[4:]
+		suggestions = json.loads(raw)
+		# Ensure we return only strings
+		return [str(s).strip() for s in suggestions if s][:4]  # max 4 suggestions
+	except Exception as e:
+		print(f"Error generating quick responses: {e}")
+		return []
