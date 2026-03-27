@@ -49,11 +49,7 @@ function Bar({ value, max = 10, color }) {
 function StudioAudioPlayer({ filename }) {
   console.log(`[StudioAudioPlayer] Rendered with filename:`, filename);
   
-  if (!filename) {
-    console.warn(`[StudioAudioPlayer] No filename provided!`);
-    return <div style={{ color: "#EF4444", fontSize: 13, padding: 12 }}>❌ No audio file associated with this call</div>;
-  }
-  
+  // ✓ All hooks MUST be called unconditionally at top, before any early returns
   const audioRef = useRef(null);
   const analyserRef = useRef(null);
   const dataArrayRef = useRef(null);
@@ -65,6 +61,12 @@ function StudioAudioPlayer({ filename }) {
   const [duration, setDuration] = useState(0);
   const [waveData, setWaveData] = useState(new Array(26).fill(20));
   const [bufferProgress, setBufferProgress] = useState(0);
+
+  // Early return for missing filename - AFTER all hooks
+  if (!filename) {
+    console.warn(`[StudioAudioPlayer] No filename provided!`);
+    return <div style={{ color: "#EF4444", fontSize: 13, padding: 12 }}>❌ No audio file associated with this call</div>;
+  }
 
   const mime = filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm";
   const src = useMemo(
