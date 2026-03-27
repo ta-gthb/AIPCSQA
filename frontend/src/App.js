@@ -128,11 +128,16 @@ function StudioAudioPlayer({ filename }) {
       setIsPlaying(false);
     };
     const onProgress = () => {
-      if (a.buffered.length > 0 && Number.isFinite(a.duration)) {
-        const bufferedEnd = a.buffered.end(a.buffered.length - 1);
-        const pct = (bufferedEnd / a.duration) * 100;
-        setBufferProgress(Math.min(pct, 100));
-        if (pct >= 95) setReady(true);
+      if (Number.isFinite(a.duration) && a.duration > 0) {
+        setDuration(a.duration);
+        if (a.buffered.length > 0) {
+          const bufferedEnd = a.buffered.end(a.buffered.length - 1);
+          const pct = (bufferedEnd / a.duration) * 100;
+          setBufferProgress(Math.min(pct, 100));
+          if (pct >= 90) {
+            setReady(true);
+          }
+        }
       }
     };
 
@@ -143,6 +148,10 @@ function StudioAudioPlayer({ filename }) {
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("ended", onEnded);
     a.addEventListener("error", onErr);
+    
+    // Force the audio element to begin loading
+    a.src = src;
+    a.currentTime = 0;
     a.load();
 
     // Fallback: Poll for duration every 200ms for up to 5 seconds
@@ -179,7 +188,7 @@ function StudioAudioPlayer({ filename }) {
 
   const togglePlay = async () => {
     const a = audioRef.current;
-    if (!a || !ready) return;
+    if (!a || (duration === 0 && !ready)) return;
     setError("");
     if (isPlaying) {
       a.pause();
@@ -190,8 +199,8 @@ function StudioAudioPlayer({ filename }) {
       initAudioContext();
       await a.play();
       setIsPlaying(true);
-    } catch {
-      setError("Playback blocked by browser. Click again to resume.");
+    } catch (err) {
+      setError("Playback error. Check if file is loading. Try again.");
       setIsPlaying(false);
     }
   };
@@ -239,18 +248,18 @@ function StudioAudioPlayer({ filename }) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
         <button
           onClick={togglePlay}
-          disabled={!ready}
+          disabled={!ready && duration === 0}
           style={{
             width: 38,
             height: 38,
             borderRadius: 99,
             border: "none",
-            cursor: ready ? "pointer" : "not-allowed",
-            background: ready ? "linear-gradient(145deg,#F59E0B,#D97706)" : t.border,
+            cursor: (ready || duration > 0) ? "pointer" : "not-allowed",
+            background: (ready || duration > 0) ? "linear-gradient(145deg,#F59E0B,#D97706)" : t.border,
             color: "#111827",
             fontWeight: 900,
             fontSize: 14,
-            boxShadow: ready ? "0 8px 20px rgba(245,158,11,0.28)" : "none",
+            boxShadow: (ready || duration > 0) ? "0 8px 20px rgba(245,158,11,0.28)" : "none",
           }}
           title={isPlaying ? "Pause" : "Play"}
         >
