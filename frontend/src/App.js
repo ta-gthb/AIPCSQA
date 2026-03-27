@@ -57,6 +57,7 @@ function StudioAudioPlayer({ filename }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [waveData, setWaveData] = useState(new Array(26).fill(20));
+  const [bufferProgress, setBufferProgress] = useState(0);
 
   const src = `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${filename}`;
   const mime = filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm";
@@ -126,10 +127,19 @@ function StudioAudioPlayer({ filename }) {
       setReady(false);
       setIsPlaying(false);
     };
+    const onProgress = () => {
+      if (a.buffered.length > 0 && Number.isFinite(a.duration)) {
+        const bufferedEnd = a.buffered.end(a.buffered.length - 1);
+        const pct = (bufferedEnd / a.duration) * 100;
+        setBufferProgress(Math.min(pct, 100));
+        if (pct >= 95) setReady(true);
+      }
+    };
 
     a.addEventListener("loadedmetadata", onLoaded);
     a.addEventListener("canplay", onLoaded);
     a.addEventListener("durationchange", onLoaded);
+    a.addEventListener("progress", onProgress);
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("ended", onEnded);
     a.addEventListener("error", onErr);
@@ -149,6 +159,7 @@ function StudioAudioPlayer({ filename }) {
       a.removeEventListener("loadedmetadata", onLoaded);
       a.removeEventListener("canplay", onLoaded);
       a.removeEventListener("durationchange", onLoaded);
+      a.removeEventListener("progress", onProgress);
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("ended", onEnded);
       a.removeEventListener("error", onErr);
@@ -204,7 +215,7 @@ function StudioAudioPlayer({ filename }) {
       background: "linear-gradient(130deg,#111827 0%,#132138 48%,#1A2740 100%)",
       boxShadow: "inset 0 0 0 1px rgba(245,158,11,0.08)",
     }}>
-      <audio key={filename} ref={audioRef} preload="metadata">
+      <audio key={filename} ref={audioRef} preload="auto" crossOrigin="anonymous">
         <source src={src} type={mime} />
       </audio>
 
@@ -222,7 +233,7 @@ function StudioAudioPlayer({ filename }) {
             <div style={{ fontSize: 10, color: t.muted }}>Supervisor review playback</div>
           </div>
         </div>
-        <Tag label={ready ? "LIVE STREAM" : "BUFFERING"} color={ready ? t.green : t.amber} />
+        <Tag label={ready ? "LIVE STREAM" : `BUFFERING ${Math.round(bufferProgress)}%`} color={ready ? t.green : t.amber} />
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
