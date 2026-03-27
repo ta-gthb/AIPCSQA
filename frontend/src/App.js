@@ -49,7 +49,7 @@ function Bar({ value, max = 10, color }) {
 function StudioAudioPlayer({ filename }) {
   console.log(`[StudioAudioPlayer] Rendered with filename:`, filename);
   
-  // ✓ All hooks MUST be called unconditionally at top, before any early returns
+  // ✓ All hooks MUST be called unconditionally at top, NO early returns
   const audioRef = useRef(null);
   const analyserRef = useRef(null);
   const dataArrayRef = useRef(null);
@@ -62,15 +62,9 @@ function StudioAudioPlayer({ filename }) {
   const [waveData, setWaveData] = useState(new Array(26).fill(20));
   const [bufferProgress, setBufferProgress] = useState(0);
 
-  // Early return for missing filename - AFTER all hooks
-  if (!filename) {
-    console.warn(`[StudioAudioPlayer] No filename provided!`);
-    return <div style={{ color: "#EF4444", fontSize: 13, padding: 12 }}>❌ No audio file associated with this call</div>;
-  }
-
-  const mime = filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm";
+  const mime = filename?.endsWith(".ogg") ? "audio/ogg" : "audio/webm";
   const src = useMemo(
-    () => `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${filename}`,
+    () => filename ? `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${filename}` : "",
     [filename]
   );
 
@@ -238,7 +232,9 @@ function StudioAudioPlayer({ filename }) {
   const progressMax = duration > 0 ? duration : 1;
   const progressNow = currentTime > 0 ? currentTime : 0;
 
-  return (
+  return !filename ? (
+    <div style={{ color: "#EF4444", fontSize: 13, padding: 12 }}>❌ No audio file associated with this call</div>
+  ) : (
     <div style={{
       border: `1px solid ${t.border}`,
       borderRadius: 12,
