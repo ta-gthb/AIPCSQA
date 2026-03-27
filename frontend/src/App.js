@@ -704,8 +704,12 @@ function SupervisorAudit() {
             <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
               {detail?.transcript?.turns ? (
                 <>
-                  {detail.transcript.turns.filter(t => t.role === "agent").map((turn, idx) => {
+                  {detail.transcript.turns.map((turn, globalIdx) => {
+                    // Only show agent turns
+                    if (turn.role !== "agent") return null;
+                    
                     const expr = turn.expression || {};
+                    // Use actual turn index from transcript, not just agent count
                     const timeStr = turn.ts_start !== undefined && turn.ts_end !== undefined 
                       ? `${Math.floor(turn.ts_start)}s - ${Math.floor(turn.ts_end)}s`
                       : "Unknown";
@@ -727,11 +731,11 @@ function SupervisorAudit() {
                     // Determine if tone should be shown separately (avoid duplication with expression)
                     const showTone = !["helpful", "empathetic", "patient", "frustrated", "confused", "professional", "enthusiastic", "passive"].includes(currentExpr);
                     return (
-                      <div key={idx} style={{ marginBottom: 10, padding: 10, background: t.surface2, borderRadius: 8, border: `1px solid ${t.border}`, fontSize: 11 }}>
+                      <div key={globalIdx} style={{ marginBottom: 10, padding: 10, background: t.surface2, borderRadius: 8, border: `1px solid ${t.border}`, fontSize: 11 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <span style={{ fontSize: 20 }}>{expressionEmoji[currentExpr] || toneEmoji[currentTone] || "😐"}</span>
-                            <span style={{ color: t.amber, fontWeight: 700, fontSize: 12 }}>Turn #{idx + 1}</span>
+                            <span style={{ color: t.amber, fontWeight: 700, fontSize: 12 }}>Turn #{globalIdx + 1}</span>
                           </div>
                           <span style={{ color: t.muted, fontSize: 10 }}>{timeStr}</span>
                         </div>
