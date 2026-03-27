@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { auth, dashboard, agents, transcripts, compliance, reports, live, authExtra, simulation } from "./api";
 
 // ── RESPONSIVE HOOK ──────────────────────────────────────────────
@@ -60,7 +60,10 @@ function StudioAudioPlayer({ filename }) {
   const [bufferProgress, setBufferProgress] = useState(0);
 
   const mime = filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm";
-  const src = `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${filename}`;
+  const src = useMemo(
+    () => `${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${filename}`,
+    [filename]
+  );
 
   const fmt = (secs) => {
     if (!Number.isFinite(secs) || secs < 0) return "00:00";
