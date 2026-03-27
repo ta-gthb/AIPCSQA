@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { auth, dashboard, agents, transcripts, compliance, reports, live, authExtra, simulation } from "./api";
 
 // ── RESPONSIVE HOOK ──────────────────────────────────────────────
@@ -47,148 +47,121 @@ function Bar({ value, max = 10, color }) {
 }
 
 function WaveformAudioPlayer({ src, mimeType }) {
+  const containerRef = useRef(null);
   const audioRef = useRef(null);
-  const canvasRef = useRef(null);
-  const [peaks, setPeaks] = useState([]);
-  const [status, setStatus] = useState("idle");
-  const [duration, setDuration] = useState(0);
+  const wsRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-
-  const drawWaveform = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || peaks.length === 0) return;
-    const ctx = canvas.getContext("2d");
-    const dpr = window.devicePixelRatio || 1;
-    const width = Math.floor(canvas.clientWidth * dpr);
-    const height = Math.floor(canvas.clientHeight * dpr);
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
-    }
-    ctx.clearRect(0, 0, width, height);
-    const mid = height / 2;
-    const barWidth = width / peaks.length;
-    const progress = duration > 0 ? currentTime / duration : 0;
-    const progressIndex = Math.floor(peaks.length * progress);
-
-    for (let i = 0; i < peaks.length; i += 1) {
-      const barHeight = Math.max(1, peaks[i] * height);
-      const x = i * barWidth;
-      const y = mid - barHeight / 2;
-      ctx.fillStyle = i <= progressIndex ? t.amber : t.border;
-      ctx.fillRect(x, y, Math.max(1, barWidth * 0.8), barHeight);
-    }
-  }, [peaks, currentTime, duration]);
+  const [duration, setDuration] = useState(0);
 
   useEffect(() => {
-    drawWaveform();
-  }, [drawWaveform]);
-
-  useEffect(() => {
-    const onResize = () => drawWaveform();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [drawWaveform]);
-
-  useEffect(() => {
-    if (!src) return undefined;
-    let cancelled = false;
-    const controller = new AbortController();
-    setStatus("loading");
-    setPeaks([]);
-    setCurrentTime(0);
-    setDuration(0);
-
-    const run = async () => {
+    if (!src || !containerRef.current) return undefined;
+    
+    // Lazy-load WaveSurfer to avoid SSR issues
+    const loadWaveform = async () => {
       try {
-        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextCtor) throw new Error("AudioContext unavailable");
-        const res = await fetch(src, { signal: controller.signal });
-        const arrayBuffer = await res.arrayBuffer();
-        const audioCtx = new AudioContextCtor();
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-        const channel = audioBuffer.getChannelData(0);
-        const samples = 180;
-        const blockSize = Math.max(1, Math.floor(channel.length / samples));
-        const nextPeaks = [];
-
-        for (let i = 0; i < samples; i += 1) {
-          let max = 0;
-          const start = i * blockSize;
-          const end = Math.min(start + blockSize, channel.length);
-          for (let j = start; j < end; j += 1) {
-            const value = Math.abs(channel[j]);
-            if (value > max) max = value;
-          }
-          nextPeaks.push(max);
+        const WaveSurfer = (await import("wavesurfer.js")).default;
+        
+        if (wsRef.current) {
+          wsRef.current.destroy();
         }
 
-        if (!cancelled) {
-          setPeaks(nextPeaks);
-          setDuration(audioBuffer.duration || 0);
-          setStatus("ready");
-        }
-        audioCtx.close().catch(() => {});
-      } catch {
-        if (!cancelled) setStatus("error");
+        wsRef.current = WaveSurfer.create({
+          container: containerRef.current,
+          waveColor: t.border,
+          progressColor: t.amber,
+          cursorColor: t.amber,
+          barWidth: 2,
+          barRadius: 3,
+          barGap: 4,
+          height: 56,
+          responsive: true,
+          autoplay: false,
+          url: src,
+        });
+
+        wsRef.current.on("ready", () => {
+          setDuration(wsRef.current.getDuration());
+        });
+
+        wsRef.current.on("audioprocess", () => {
+          setCurrentTime(wsRef.current.getCurrentTime());
+        });
+
+        wsRef.current.on("play", () => setIsPlaying(true));
+        wsRef.current.on("pause", () => setIsPlaying(false));
+        wsRef.current.on("finish", () => setIsPlaying(false));
+      } catch (err) {
+        console.error("WaveSurfer load error:", err);
       }
     };
 
-    run();
+    loadWaveform();
 
     return () => {
-      cancelled = true;
-      controller.abort();
+      if (wsRef.current) {
+        wsRef.current.destroy();
+        wsRef.current = null;
+      }
     };
-  }, [src]);
+  }, [src, mimeType]);
 
-  const onSeek = (evt) => {
-    if (!audioRef.current || duration <= 0) return;
-    const rect = evt.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (evt.clientX - rect.left) / rect.width));
-    audioRef.current.currentTime = ratio * duration;
+  const togglePlayPause = () => {
+    if (wsRef.current) {
+      wsRef.current.playPause();
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
   };
 
   return (
-    <div>
-      <audio
-        ref={audioRef}
-        controls
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
-        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime || 0)}
-        onEnded={() => setCurrentTime(duration)}
-        style={{ width: "100%", height: 36 }}
-      >
-        <source src={src} type={mimeType} />
-        Your browser does not support audio playback.
-      </audio>
-      <div style={{ marginTop: 8 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-          <span style={{ color: t.muted, fontSize: 10 }}>Waveform</span>
-          <span style={{ color: t.muted, fontSize: 10 }}>
-            {Math.floor(currentTime)}s / {Math.floor(duration)}s
-          </span>
-        </div>
-        <div
-          onClick={onSeek}
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <button
+          onClick={togglePlayPause}
           style={{
-            height: 56,
-            background: t.surface,
-            border: `1px solid ${t.border}`,
-            borderRadius: 8,
-            padding: 6,
-            cursor: duration > 0 ? "pointer" : "default",
+            width: 44,
+            height: 44,
+            borderRadius: "50%",
+            background: t.amber,
+            border: "none",
+            color: "#000",
+            fontSize: 20,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontWeight: 700,
+            transition: "all 0.2s",
+            boxShadow: `0 4px 12px ${t.amber}40`,
+            hover: { transform: "scale(1.05)" },
           }}
+          onMouseEnter={(e) => (e.target.style.transform = "scale(1.08)")}
+          onMouseLeave={(e) => (e.target.style.transform = "scale(1)")}
         >
-          <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />
+          {isPlaying ? "⏸" : "▶"}
+        </button>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div
+            ref={containerRef}
+            style={{
+              borderRadius: 8,
+              overflow: "hidden",
+              background: t.surface,
+              border: `1px solid ${t.border}`,
+            }}
+          />
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.muted }}>
+            <span>{formatTime(currentTime)}</span>
+            <span>{formatTime(duration)}</span>
+          </div>
         </div>
-        {status === "loading" && (
-          <div style={{ color: t.muted, fontSize: 10, marginTop: 6 }}>Analyzing waveform...</div>
-        )}
-        {status === "error" && (
-          <div style={{ color: t.red, fontSize: 10, marginTop: 6 }}>Waveform unavailable for this file.</div>
-        )}
       </div>
+      <audio ref={audioRef} src={src} type={mimeType} crossOrigin="anonymous" />
     </div>
   );
 }
