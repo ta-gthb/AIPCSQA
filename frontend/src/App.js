@@ -47,6 +47,8 @@ function Bar({ value, max = 10, color }) {
 }
 
 function StudioAudioPlayer({ filename }) {
+  console.log(`[StudioAudioPlayer] Rendered with filename:`, filename);
+  
   const audioRef = useRef(null);
   const analyserRef = useRef(null);
   const dataArrayRef = useRef(null);
@@ -108,6 +110,9 @@ function StudioAudioPlayer({ filename }) {
     const a = audioRef.current;
     if (!a) return;
 
+    console.log(`[Audio Load] Starting for filename: ${filename}`);
+    console.log(`[Audio Load] URL: ${src}`);
+
     setReady(false);
     setError("");
     setIsPlaying(false);
@@ -115,7 +120,9 @@ function StudioAudioPlayer({ filename }) {
     setDuration(0);
 
     const onLoaded = () => {
+      console.log(`[Audio Event] loadedmetadata/canplay/durationchange fired`);
       if (Number.isFinite(a.duration) && a.duration > 0) {
+        console.log(`[Audio Load] Duration detected: ${a.duration}s`);
         setDuration(a.duration);
         setReady(true);
       }
@@ -126,6 +133,7 @@ function StudioAudioPlayer({ filename }) {
       setWaveData(new Array(26).fill(20));
     };
     const onErr = () => {
+      console.error(`[Audio Error] Error loading audio:`, a.error);
       setError("Audio stream is unavailable right now.");
       setReady(false);
       setIsPlaying(false);
@@ -136,8 +144,10 @@ function StudioAudioPlayer({ filename }) {
         if (a.buffered.length > 0) {
           const bufferedEnd = a.buffered.end(a.buffered.length - 1);
           const pct = (bufferedEnd / a.duration) * 100;
+          console.log(`[Audio Buffer] ${pct.toFixed(1)}% buffered`);
           setBufferProgress(Math.min(pct, 100));
           if (pct >= 90) {
+            console.log(`[Audio Ready] Buffer threshold reached`);
             setReady(true);
           }
         }
@@ -153,6 +163,7 @@ function StudioAudioPlayer({ filename }) {
     a.addEventListener("error", onErr);
     
     // Force the audio element to begin loading
+    console.log(`[Audio Load] Setting src and calling load()`);
     a.src = src;
     a.currentTime = 0;
     a.load();
@@ -160,6 +171,7 @@ function StudioAudioPlayer({ filename }) {
     // Fallback: Poll for duration every 200ms for up to 5 seconds
     const durationPoll = setInterval(() => {
       if (Number.isFinite(a.duration) && a.duration > 0) {
+        console.log(`[Audio Poll] Duration detected via polling: ${a.duration}s`);
         setDuration(a.duration);
         setReady(true);
         clearInterval(durationPoll);
@@ -167,6 +179,7 @@ function StudioAudioPlayer({ filename }) {
     }, 200);
 
     return () => {
+      console.log(`[Audio Unmount] Cleaning up for filename: ${filename}`);
       clearInterval(durationPoll);
       a.removeEventListener("loadedmetadata", onLoaded);
       a.removeEventListener("canplay", onLoaded);
