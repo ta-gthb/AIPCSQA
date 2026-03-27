@@ -46,6 +46,153 @@ function Bar({ value, max = 10, color }) {
   );
 }
 
+function WaveformAudioPlayer({ src, mimeType }) {
+  const audioRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [peaks, setPeaks] = useState([]);
+  const [status, setStatus] = useState("idle");
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const drawWaveform = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || peaks.length === 0) return;
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.floor(canvas.clientWidth * dpr);
+    const height = Math.floor(canvas.clientHeight * dpr);
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+    ctx.clearRect(0, 0, width, height);
+    const mid = height / 2;
+    const barWidth = width / peaks.length;
+    const progress = duration > 0 ? currentTime / duration : 0;
+    const progressIndex = Math.floor(peaks.length * progress);
+
+    for (let i = 0; i < peaks.length; i += 1) {
+      const barHeight = Math.max(1, peaks[i] * height);
+      const x = i * barWidth;
+      const y = mid - barHeight / 2;
+      ctx.fillStyle = i <= progressIndex ? t.amber : t.border;
+      ctx.fillRect(x, y, Math.max(1, barWidth * 0.8), barHeight);
+    }
+  };
+
+  useEffect(() => {
+    drawWaveform();
+  }, [peaks, currentTime, duration]);
+
+  useEffect(() => {
+    const onResize = () => drawWaveform();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [peaks, currentTime, duration]);
+
+  useEffect(() => {
+    if (!src) return undefined;
+    let cancelled = false;
+    const controller = new AbortController();
+    setStatus("loading");
+    setPeaks([]);
+    setCurrentTime(0);
+    setDuration(0);
+
+    const run = async () => {
+      try {
+        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextCtor) throw new Error("AudioContext unavailable");
+        const res = await fetch(src, { signal: controller.signal });
+        const arrayBuffer = await res.arrayBuffer();
+        const audioCtx = new AudioContextCtor();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+        const channel = audioBuffer.getChannelData(0);
+        const samples = 180;
+        const blockSize = Math.max(1, Math.floor(channel.length / samples));
+        const nextPeaks = [];
+
+        for (let i = 0; i < samples; i += 1) {
+          let max = 0;
+          const start = i * blockSize;
+          const end = Math.min(start + blockSize, channel.length);
+          for (let j = start; j < end; j += 1) {
+            const value = Math.abs(channel[j]);
+            if (value > max) max = value;
+          }
+          nextPeaks.push(max);
+        }
+
+        if (!cancelled) {
+          setPeaks(nextPeaks);
+          setDuration(audioBuffer.duration || 0);
+          setStatus("ready");
+        }
+        audioCtx.close().catch(() => {});
+      } catch {
+        if (!cancelled) setStatus("error");
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [src]);
+
+  const onSeek = (evt) => {
+    if (!audioRef.current || duration <= 0) return;
+    const rect = evt.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (evt.clientX - rect.left) / rect.width));
+    audioRef.current.currentTime = ratio * duration;
+  };
+
+  return (
+    <div>
+      <audio
+        ref={audioRef}
+        controls
+        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime || 0)}
+        onEnded={() => setCurrentTime(duration)}
+        style={{ width: "100%", height: 36 }}
+      >
+        <source src={src} type={mimeType} />
+        Your browser does not support audio playback.
+      </audio>
+      <div style={{ marginTop: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ color: t.muted, fontSize: 10 }}>Waveform</span>
+          <span style={{ color: t.muted, fontSize: 10 }}>
+            {Math.floor(currentTime)}s / {Math.floor(duration)}s
+          </span>
+        </div>
+        <div
+          onClick={onSeek}
+          style={{
+            height: 56,
+            background: t.surface,
+            border: `1px solid ${t.border}`,
+            borderRadius: 8,
+            padding: 6,
+            cursor: duration > 0 ? "pointer" : "default",
+          }}
+        >
+          <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />
+        </div>
+        {status === "loading" && (
+          <div style={{ color: t.muted, fontSize: 10, marginTop: 6 }}>Analyzing waveform...</div>
+        )}
+        {status === "error" && (
+          <div style={{ color: t.red, fontSize: 10, marginTop: 6 }}>Waveform unavailable for this file.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════
 //  LOGIN
 // ════════════════════════════════════════════════════════════════
@@ -552,20 +699,11 @@ function SupervisorAudit() {
             {detail?.call?.audio_filename && (
               <div style={{ padding: "10px 16px", borderBottom: `1px solid ${t.border}`, background: t.surface2 }}>
                 <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>AUDIO RECORDING</div>
-                {/* key forces React to unmount+remount the <audio> element whenever
-                    the selected call changes, so the browser loads the new source
-                    instead of keeping the previous call's buffered audio. */}
-                <audio
+                <WaveformAudioPlayer
                   key={detail.call.audio_filename}
-                  controls
-                  style={{ width: "100%", height: 36 }}
-                >
-                  <source
-                    src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
-                    type={detail.call.audio_filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
-                  />
-                  Your browser does not support audio playback.
-                </audio>
+                  src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
+                  mimeType={detail.call.audio_filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
+                />
               </div>
             )}
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
