@@ -11,7 +11,7 @@ from models.transcript import Transcript
 from models.audit import AuditResult
 from models.violation import Violation, Severity
 from models.agent import Agent
-from services.ai_auditor import audit_transcript, enrich_turns_with_expressions, generate_quick_responses
+from services.ai_auditor import audit_transcript, enrich_turns_with_expressions
 from services.scoring import refresh_agent_stats
 from websocket_manager import manager
 from config import settings
@@ -369,29 +369,3 @@ async def resolve_violation(violation_id: str, db: AsyncSession = Depends(get_db
 	v.resolved_at = datetime.datetime.utcnow()
 	await db.commit()
 	return {"status": "resolved"}
-
-
-@router.post("/quick-responses", status_code=200)
-async def get_quick_responses(
-	customer_message: str,
-	db: AsyncSession = Depends(get_db),
-	_: User = Depends(current_user)
-):
-	"""
-	Generate AI-based quick response suggestions based on customer's message.
-	Not hardcoded or pre-stored—generated dynamically using LLM.
-	Can be called during live calls without needing a call_id.
-	"""
-	if not customer_message or not customer_message.strip():
-		return {
-			"suggestions": [],
-			"generated_at": datetime.datetime.utcnow().isoformat()
-		}
-	
-	# Generate suggestions using LLM
-	suggestions = await generate_quick_responses(customer_message)
-	
-	return {
-		"suggestions": suggestions,
-		"generated_at": datetime.datetime.utcnow().isoformat()
-	}
