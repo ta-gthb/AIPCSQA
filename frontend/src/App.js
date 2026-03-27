@@ -49,6 +49,11 @@ function Bar({ value, max = 10, color }) {
 function StudioAudioPlayer({ filename }) {
   console.log(`[StudioAudioPlayer] Rendered with filename:`, filename);
   
+  if (!filename) {
+    console.warn(`[StudioAudioPlayer] No filename provided!`);
+    return <div style={{ color: "#EF4444", fontSize: 13, padding: 12 }}>❌ No audio file associated with this call</div>;
+  }
+  
   const audioRef = useRef(null);
   const analyserRef = useRef(null);
   const dataArrayRef = useRef(null);
@@ -162,10 +167,9 @@ function StudioAudioPlayer({ filename }) {
     a.addEventListener("ended", onEnded);
     a.addEventListener("error", onErr);
     
-    // Force the audio element to begin loading
-    console.log(`[Audio Load] Setting src and calling load()`);
-    a.src = src;
-    a.currentTime = 0;
+    // Let React handle src via JSX <source> element, just trigger load
+    // Avoid setting a.src directly when using <source> elements
+    console.log(`[Audio Load] Calling load() to start buffering`);
     a.load();
 
     // Fallback: Poll for duration every 200ms for up to 5 seconds
