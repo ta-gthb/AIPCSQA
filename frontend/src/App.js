@@ -2398,7 +2398,7 @@ function AgentVoiceCall() {
 function AgentUploadRecording() {
   const [file,         setFile]         = useState(null);
   const [callRef,      setCallRef]      = useState(`#${Math.floor(1000 + Math.random() * 9000)}`);
-  const [firstSpeaker, setFirstSpeaker] = useState("agent");  // "agent" | "customer"
+  const [firstSpeaker, setFirstSpeaker] = useState("customer");  // "agent" | "customer" - customer usually calls first
   const [status,       setStatus]       = useState("idle");   // idle | uploading | success | error
   const [msg,          setMsg]          = useState("");
   const [agentInfo,    setAgentInfo]    = useState(null);
@@ -2485,7 +2485,7 @@ function AgentUploadRecording() {
           </button>
         )}
         {status === "success" && (
-          <button style={{ ...S.ghost, marginTop: 14 }} onClick={() => { setFile(null); setStatus("idle"); setMsg(""); setCallRef(`#${Math.floor(1000 + Math.random() * 9000)}`); setUploadedId(null); }}>
+          <button style={{ ...S.ghost, marginTop: 14 }} onClick={() => { setFile(null); setStatus("idle"); setMsg(""); setCallRef(`#${Math.floor(1000 + Math.random() * 9000)}`); setFirstSpeaker("customer"); setUploadedId(null); }}>
             + Upload Another Recording
           </button>
         )}

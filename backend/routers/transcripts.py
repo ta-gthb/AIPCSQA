@@ -208,32 +208,36 @@ async def upload_recording(
 				for i, turn in enumerate(turns):
 					print(f"  Turn {i+1} ({turn['role']}): {turn['ts_start']:.1f}s-{turn['ts_end']:.1f}s | {turn['text'][:50]}")
 				
-				# Auto-detect and fix speaker roles if needed
-				# Check if the roles seem swapped based on content patterns
-				agent_phrases = ["order id", "reference", "eligible for", "i can", "we can", "i will", "we will", "sorry", "apologize", "replacement"]
-				customer_phrases = ["i bought", "i have", "i want", "please", "can you", "could you", "why", "what", "when", "thank you"]
+				# Auto-detect and fix speaker roles if they're reversed
+				# Strategy: Check patterns in the turns to detect role reversal
+				agent_indicators = 0  # phrases that indicate agent role
+				customer_indicators = 0  # phrases that indicate customer role
 				
-				agent_count = 0
-				customer_count = 0
 				for turn in turns:
 					text_lower = turn["text"].lower()
-					for phrase in agent_phrases:
-						if phrase in text_lower:
-							agent_count += 1
-							break
-					for phrase in customer_phrases:
-						if phrase in text_lower:
-							customer_count += 1
-							break
+					
+					# Customer indicators: they're calling with a problem
+					if any(x in text_lower for x in ["i bought", "i have", "i want", "please", "can you", "could you", "my order", "problem", "issue", "complaint"]):
+						customer_indicators += 1
+					
+					# Agent indicators: they're helping/responding
+					elif any(x in text_lower for x in ["order id", "eligible for", "replacement", "sorry", "apologize", "refund", "appreciate", "thank you for calling", "customer support"]):
+						agent_indicators += 1
 				
-				# If roles seem significantly reversed, swap them all
-				if customer_count > agent_count * 1.5:  # Likely roles are swapped
-					print(f"[DEBUG] Detected swapped roles (customer phrases: {customer_count}, agent phrases: {agent_count}). Swapping all roles...")
+				# If customer indicators significantly outnumber agent indicators, roles are likely swapped
+				needs_swap = customer_indicators > max(agent_indicators, 2)  # at least 2 agent indicators to avoid swap
+				
+				if needs_swap and len(turns) > 2:
+					print(f"[DEBUG] Detected reversed roles (customer patterns: {customer_indicators}, agent patterns: {agent_indicators}). Swapping all roles...")
 					for turn in turns:
 						turn["role"] = "customer" if turn["role"] == "agent" else "agent"
+					print("[DEBUG] ✅ Roles successfully swapped")
+				else:
+					print(f"[DEBUG] Role validation: customer patterns={customer_indicators}, agent patterns={agent_indicators}, swap={needs_swap}")
 
 		except Exception as exc:
 			transcript_error = str(exc)
+			print(f"[ERROR] Transcription failed: {exc}")
 			# Graceful degradation: store a placeholder turn so the call record is usable
 			turns = [{"role": "agent", "text": f"[Transcription unavailable: {exc}]", "ts_start": 0.0, "ts_end": 0.0}]
 			raw_text_parts = [turns[0]["text"]]
