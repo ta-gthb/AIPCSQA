@@ -216,7 +216,7 @@ async def get_quick_response_suggestions(turns: list[dict], current_customer_mes
 		history_text = f"Recent conversation:\n{history}\n\nLatest customer message: {current_customer_message}"
 		
 		response = await client.chat.completions.create(
-			model="gpt-3.5-turbo",
+			model="llama-3.3-70b-versatile",
 			messages=[
 				{
 					"role": "system",
