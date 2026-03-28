@@ -1805,7 +1805,9 @@ function AgentLiveChat() {
     if (!input.trim() || status !== "active") return;
     const text = input.trim();
     setInput("");
-    historyRef.current = [...historyRef.current, { role: "agent", text }];
+    // Capture real timestamp when message is sent
+    const ts_start = Date.now() / 1000;
+    historyRef.current = [...historyRef.current, { role: "agent", text, ts_start }];
     setMessages(prev => [...prev, { role: "agent", text, time: now() }]);
     const tips = [
       "✅ Good empathy — acknowledge the customer's feelings.",
@@ -1818,11 +1820,18 @@ function AgentLiveChat() {
     setTimeout(() => setCoaching(null), 5000);
     setBotTyping(true);
     try {
-      const r = await simulation.turn({ scenario_id: session.scenario.id, agent_text: text, history: historyRef.current });
+      const r = await simulation.turn({ scenario_id: session.scenario.id, agent_text: text, history: historyRef.current.map(t => ({ role: t.role, text: t.text })) });
+      // Mark end of agent turn and start of customer turn
+      const ts_end = Date.now() / 1000;
+      historyRef.current[historyRef.current.length - 1].ts_end = ts_end;
+      
       const customerText = r.data.customer_text;
-      historyRef.current = [...historyRef.current, { role: "customer", text: customerText }];
+      const customer_ts_start = Date.now() / 1000;
+      historyRef.current = [...historyRef.current, { role: "customer", text: customerText, ts_start: customer_ts_start }];
       setMessages(prev => [...prev, { role: "customer", text: customerText, time: now() }]);
     } catch {
+      const ts_end = Date.now() / 1000;
+      historyRef.current[historyRef.current.length - 1].ts_end = ts_end;
       setMessages(prev => [...prev, { role: "customer", text: "(No reply — check connection)", time: now() }]);
     } finally { setBotTyping(false); }
   };
@@ -1830,8 +1839,20 @@ function AgentLiveChat() {
   const endChat = async () => {
     setStatus("ending");
     try {
-      const turns = historyRef.current.map((t, i) => ({ role: t.role, text: t.text, ts_start: i * 10, ts_end: i * 10 + 8 }));
-      await transcripts.ingest({ call_ref: session.call_ref, agent_id: agentInfo?.id || "", channel: "chat", duration_sec: turns.length * 8, turns });
+      // Mark end of last turn if not already marked
+      if (historyRef.current.length > 0 && !historyRef.current[historyRef.current.length - 1].ts_end) {
+        historyRef.current[historyRef.current.length - 1].ts_end = Date.now() / 1000;
+      }
+      
+      // Calculate total duration and fill in any missing timestamps
+      const turns = historyRef.current.map((t, i) => {
+        const ts_start = t.ts_start || i * 10;
+        const ts_end = t.ts_end || ts_start + 8;
+        return { role: t.role, text: t.text, ts_start, ts_end };
+      });
+      
+      const totalDuration = turns.length > 0 ? Math.max(...turns.map(t => t.ts_end)) : 0;
+      await transcripts.ingest({ call_ref: session.call_ref, agent_id: agentInfo?.id || "", channel: "chat", duration_sec: Math.ceil(totalDuration), turns });
       setAuditResult("✅ Chat submitted for AI quality audit. Check My Performance for the score.");
     } catch (e) {
       setAuditResult("⚠️ Could not submit: " + (e.response?.data?.detail || e.message));
@@ -2109,20 +2130,27 @@ function AgentVoiceCall() {
     rec.onresult = async e => {
       const text = e.results[0]?.[0]?.transcript?.trim();
       if (!text || !isActiveRef.current) return;
-      historyRef.current = [...historyRef.current, { role: "agent", text }];
+      // Capture timestamp when speech is recognized
+      const agent_ts_start = Date.now() / 1000;
+      historyRef.current = [...historyRef.current, { role: "agent", text, ts_start: agent_ts_start }];
       setTranscript(prev => [...prev, { role: "agent", text, time: now() }]);
       setCallState("speaking");
       setStatusMsg("🤖 Customer is responding...");
       try {
-        const r = await simulation.turn({ scenario_id: sessionRef.current.scenario.id, agent_text: text, history: historyRef.current });
+        const r = await simulation.turn({ scenario_id: sessionRef.current.scenario.id, agent_text: text, history: historyRef.current.map(t => ({ role: t.role, text: t.text })) });
+        const agent_ts_end = Date.now() / 1000;
+        historyRef.current[historyRef.current.length - 1].ts_end = agent_ts_end;
+        
         const reply = r.data.customer_text;
         // Do NOT add customer turn to history/transcript yet — wait until
         // speak() finishes so the transcript only shows what was actually heard.
         setStatusMsg("🔊 Customer speaking...");
+        const customer_ts_start = Date.now() / 1000;
         speak(reply, () => {
           // Guard: call may have been ended while customer was speaking.
           if (!isActiveRef.current) return;
-          historyRef.current = [...historyRef.current, { role: "customer", text: reply }];
+          const customer_ts_end = Date.now() / 1000;
+          historyRef.current = [...historyRef.current, { role: "customer", text: reply, ts_start: customer_ts_start, ts_end: customer_ts_end }];
           setTranscript(prev => [...prev, { role: "customer", text: reply, time: now() }]);
           startListening();
         });
@@ -2206,7 +2234,8 @@ function AgentVoiceCall() {
     clearInterval(speakIntervalRef.current);
     const partialSpoken = liveSpeakingRef.current?.partial?.trim();
     if (partialSpoken) {
-      historyRef.current = [...historyRef.current, { role: "customer", text: partialSpoken }];
+      const ts_start = Date.now() / 1000;
+      historyRef.current = [...historyRef.current, { role: "customer", text: partialSpoken, ts_start }];
       setTranscript(prev => [...prev, { role: "customer", text: partialSpoken, time: now() }]);
     }
     liveSpeakingRef.current = null;
@@ -2234,7 +2263,19 @@ function AgentVoiceCall() {
     micStreamRef.current?.getTracks().forEach(tr => tr.stop());
 
     try {
-      const turns = historyRef.current.map((t, i) => ({ role: t.role, text: t.text, ts_start: i * 15, ts_end: i * 15 + 12 }));
+      // Mark end of last turn if not already marked
+      if (historyRef.current.length > 0 && !historyRef.current[historyRef.current.length - 1].ts_end) {
+        historyRef.current[historyRef.current.length - 1].ts_end = Date.now() / 1000;
+      }
+      
+      // Use actual timestamps from turns, fallback only if missing
+      const turns = historyRef.current.map(t => ({
+        role: t.role,
+        text: t.text,
+        ts_start: t.ts_start || 0,
+        ts_end: t.ts_end || (t.ts_start || 0) + 5
+      }));
+      
       const res = await transcripts.ingest({ call_ref: sessionRef.current?.call_ref || `SIM-P${Date.now()}`, agent_id: agentInfo?.id || "", channel: "phone", duration_sec: duration, turns });
       // Upload audio recording if available
       if (recordingBlob && res?.data?.call_id) {
