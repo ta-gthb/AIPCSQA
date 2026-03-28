@@ -72,6 +72,8 @@ function WaveformAudioPlayer({ src, mimeType }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [playbackRate, setPlaybackRate] = useState(1);
 
   useEffect(() => {
     if (!src || !containerRef.current) return undefined;
@@ -131,6 +133,36 @@ function WaveformAudioPlayer({ src, mimeType }) {
     }
   };
 
+  const handleVolumeChange = (e) => {
+    const vol = parseFloat(e.target.value);
+    setVolume(vol);
+    if (audioRef.current) {
+      audioRef.current.volume = vol;
+    }
+  };
+
+  const handlePlaybackRateChange = (e) => {
+    const rate = parseFloat(e.target.value);
+    setPlaybackRate(rate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+    if (wsRef.current && wsRef.current.backend && wsRef.current.backend.audioContext) {
+      wsRef.current.backend.playbackRate = rate;
+    }
+  };
+
+  const handleDownload = () => {
+    if (src) {
+      const link = document.createElement("a");
+      link.href = src;
+      link.download = `audio-recording-${Date.now()}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
@@ -138,7 +170,8 @@ function WaveformAudioPlayer({ src, mimeType }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Main player controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <button
           onClick={togglePlayPause}
@@ -180,6 +213,83 @@ function WaveformAudioPlayer({ src, mimeType }) {
           </div>
         </div>
       </div>
+
+      {/* Volume, Speed, Download controls */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        {/* Volume control */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 150 }}>
+          <label style={{ color: t.muted, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>🔊 Vol:</label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={volume}
+            onChange={handleVolumeChange}
+            style={{
+              flex: 1,
+              cursor: "pointer",
+              accentColor: t.amber,
+            }}
+          />
+          <span style={{ color: t.muted, fontSize: 11, minWidth: 25 }}>{Math.round(volume * 100)}%</span>
+        </div>
+
+        {/* Playback speed control */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <label style={{ color: t.muted, fontSize: 12, fontWeight: 600 }}>⚡ Speed:</label>
+          <select
+            value={playbackRate}
+            onChange={handlePlaybackRateChange}
+            style={{
+              padding: "6px 10px",
+              background: t.surface,
+              border: `1px solid ${t.border}`,
+              borderRadius: 6,
+              color: t.text,
+              fontSize: 12,
+              cursor: "pointer",
+              appearance: "none",
+              backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${t.text.replace("#", "%23")}' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 6px center",
+              backgroundSize: "18px",
+              paddingRight: 28,
+            }}
+          >
+            <option value="0.5">0.5x</option>
+            <option value="0.75">0.75x</option>
+            <option value="1">1x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2x</option>
+          </select>
+        </div>
+
+        {/* Download button */}
+        <button
+          onClick={handleDownload}
+          style={{
+            padding: "6px 14px",
+            background: t.green,
+            border: "none",
+            borderRadius: 6,
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            transition: "all 0.2s",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+          onMouseEnter={(e) => (e.target.style.opacity = "0.8")}
+          onMouseLeave={(e) => (e.target.style.opacity = "1")}
+        >
+          ⬇ Download
+        </button>
+      </div>
+
       <audio ref={audioRef} src={src} type={mimeType} crossOrigin="anonymous" />
     </div>
   );
