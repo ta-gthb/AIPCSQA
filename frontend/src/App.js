@@ -876,19 +876,21 @@ function SupervisorAudit() {
             <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
               {detail?.transcript?.turns ? (
                 <>
-                  {detail.transcript.turns.map((turn, globalIdx) => {
-                    // Only show agent turns
-                    if (turn.role !== "agent") return null;
+                  {detail.transcript.turns.reduce((acc, turn, globalIdx) => {
+                    if (turn.role !== "agent") return acc;
                     
+                    const agentTurnNum = acc.length + 1;
                     const expr = turn.expression || {};
-                    // Use actual turn index from transcript, not just agent count
+                    
+                    // Display timestamps correctly
                     const timeStr = turn.ts_start !== undefined && turn.ts_end !== undefined 
                       ? `${Math.floor(turn.ts_start)}s - ${Math.floor(turn.ts_end)}s`
                       : "Unknown";
+                    
                     const toneColor = expr.tone === "positive" ? t.green : expr.tone === "negative" ? t.red : t.muted;
                     const profColor = expr.professionalism === "high" ? t.green : expr.professionalism === "low" ? t.red : t.amber;
                     const engageColor = expr.engagement === "high" ? t.green : expr.engagement === "low" ? t.red : t.amber;
-                    // Emoji mapping - expressions only (no tone duplicates)
+                    
                     const expressionEmoji = {
                       "helpful": "🤝", "empathetic": "💙", "patient": "⏳", "frustrated": "😤",
                       "confused": "🤔", "professional": "💼", "enthusiastic": "🚀", "passive": "😐"
@@ -896,18 +898,23 @@ function SupervisorAudit() {
                     const toneEmoji = { "positive": "😊", "negative": "😞", "neutral": "😐" };
                     const profEmoji = { "high": "⭐", "medium": "✓", "low": "⚠️" };
                     const engageEmoji = { "high": "🔥", "medium": "▬", "low": "❄️" };
+                    
                     const currentExpr = expr.expression || "neutral";
                     const currentTone = expr.tone || "neutral";
                     const currentProf = expr.professionalism || "medium";
                     const currentEngage = expr.engagement || "medium";
-                    // Determine if tone should be shown separately (avoid duplication with expression)
+                    
                     const showTone = !["helpful", "empathetic", "patient", "frustrated", "confused", "professional", "enthusiastic", "passive"].includes(currentExpr);
-                    return (
-                      <div key={globalIdx} style={{ marginBottom: 10, padding: 10, background: t.surface2, borderRadius: 8, border: `1px solid ${t.border}`, fontSize: 11 }}>
+                    
+                    acc.push(
+                      <div key={`agent-turn-${agentTurnNum}-${globalIdx}`} style={{ marginBottom: 10, padding: 10, background: t.surface2, borderRadius: 8, border: `1px solid ${t.border}`, fontSize: 11 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <span style={{ fontSize: 20 }}>{expressionEmoji[currentExpr] || toneEmoji[currentTone] || "😐"}</span>
-                            <span style={{ color: t.amber, fontWeight: 700, fontSize: 12 }}>Turn #{globalIdx + 1}</span>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              <span style={{ color: t.amber, fontWeight: 700, fontSize: 12 }}>Agent Turn #{agentTurnNum}</span>
+                              <span style={{ color: t.muted, fontSize: 9 }}>Transcript #{globalIdx + 1}</span>
+                            </div>
                           </div>
                           <span style={{ color: t.muted, fontSize: 10 }}>{timeStr}</span>
                         </div>
@@ -922,7 +929,8 @@ function SupervisorAudit() {
                         </div>
                       </div>
                     );
-                  })}
+                    return acc;
+                  }, [])}
                   {detail.transcript.turns.filter(t => t.role === "agent").length === 0 && (
                     <div style={{ color: t.muted, fontSize: 12, textAlign: "center", marginTop: 40 }}>No agent responses found</div>
                   )}
