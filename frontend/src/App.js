@@ -1819,6 +1819,8 @@ function AgentLiveChat() {
       chatStartTimeRef.current = Date.now();
       historyRef.current = [{ role: "customer", text: r.data.opening_message, ts_start: 0, ts_end: 2 }];
       setMessages([{ role: "customer", text: r.data.opening_message, time: now() }]);
+      // Generate quick responses immediately when chat starts
+      generateQuickResponses(historyRef.current, r.data.opening_message);
       setStatus("active");
     } catch (e) {
       setStatus("idle");
@@ -1972,7 +1974,7 @@ function AgentLiveChat() {
               ))
             ) : (
               <div style={{ padding: "12px", color: t.muted, fontSize: 12, textAlign: "center" }}>
-                {loadingResponses ? "Generating AI suggestions..." : "AI suggestions will appear after customer's first message"}
+                {loadingResponses ? "Generating AI suggestions..." : "Start a chat to see AI-powered suggestions"}
               </div>
             )}
           </div>
