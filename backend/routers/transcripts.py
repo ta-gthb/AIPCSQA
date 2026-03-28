@@ -202,6 +202,11 @@ async def upload_recording(
 				plain = result.text or "[empty transcription]"
 				turns = [{"role": "agent", "text": plain, "ts_start": 0.0, "ts_end": 0.0}]
 				raw_text_parts = [plain]
+			else:
+				# Log timestamps for debugging
+				print(f"[DEBUG] AssemblyAI Timestamps for call {call_ref}:")
+				for i, turn in enumerate(turns):
+					print(f"  Turn {i+1} ({turn['role']}): {turn['ts_start']:.1f}s-{turn['ts_end']:.1f}s | {turn['text'][:50]}")
 
 		except Exception as exc:
 			transcript_error = str(exc)

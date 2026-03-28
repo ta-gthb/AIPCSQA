@@ -1016,6 +1016,26 @@ function SupervisorAudit() {
                         <div style={{ color: t.amber, fontWeight: 700, fontSize: 14 }}>{Math.round(totalTime)}s</div>
                       </div>
                     </div>
+                    {/* Timestamp Verification Debug */}
+                    <div style={{ marginTop: 14, padding: 10, background: t.surface2, borderRadius: 6, fontSize: 10, maxHeight: 200, overflowY: "auto", textAlign: "left", border: `1px solid ${t.border}` }}>
+                      <div style={{ fontWeight: 700, marginBottom: 8, color: t.green }}>📊 Timestamp Verification</div>
+                      <div style={{ color: t.muted, marginBottom: 8, lineHeight: 1.4 }}>
+                        <strong>⚠️ Debug Info:</strong> If timestamps don't match the audio positions, verify:
+                        <ul style={{ marginTop: 6, paddingLeft: 16 }}>
+                          <li>Audio quality is good (no compression)</li>
+                          <li>Speaker identification is correct (Agent vs Customer)</li>
+                          <li>Audio file format is supported</li>
+                        </ul>
+                      </div>
+                      <div style={{ marginTop: 8, padding: 8, background: t.surface, borderRadius: 4, maxHeight: 120, overflowY: "auto", fontSize: 9, color: t.muted, fontFamily: "monospace" }}>
+                        {detail.transcript.turns.slice(0, 5).map((turn, i) => (
+                          <div key={i} style={{ marginBottom: 4 }}>
+                            <span style={{ color: t.amber }}>[{Math.floor(turn.ts_start)}s-{Math.floor(turn.ts_end)}s]</span> {turn.role === "agent" ? "🎤" : "👤"} {turn.text.substring(0, 30)}...
+                          </div>
+                        ))}
+                        {detail.transcript.turns.length > 5 && <div style={{ color: t.muted, marginTop: 4 }}>+ {detail.transcript.turns.length - 5} more turns</div>}
+                      </div>
+                    </div>
                   </>
                 );
               })() : <div style={{ color: t.muted, fontSize: 13 }}>Select a call to view speaking time</div>}
