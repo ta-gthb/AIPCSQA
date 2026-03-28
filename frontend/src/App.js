@@ -1781,18 +1781,25 @@ function AgentLiveChat() {
   const [startErr,    setStartErr]    = useState("");
   const bottomRef  = useRef(null);
   const historyRef = useRef([]);
+  const chatStartTimeRef = useRef(null);
 
   useEffect(() => { agents.me().then(r => setAgentInfo(r.data)).catch(() => {}); }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   const now = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+  const getRelativeTimestamp = () => {
+    if (!chatStartTimeRef.current) return 0;
+    return (Date.now() - chatStartTimeRef.current) / 1000;
+  };
+
   const startChat = async () => {
     setStatus("starting"); setStartErr("");
     try {
       const r = await simulation.start("chat");
       setSession(r.data);
-      historyRef.current = [{ role: "customer", text: r.data.opening_message }];
+      chatStartTimeRef.current = Date.now();
+      historyRef.current = [{ role: "customer", text: r.data.opening_message, ts_start: 0, ts_end: 2 }];
       setMessages([{ role: "customer", text: r.data.opening_message, time: now() }]);
       setStatus("active");
     } catch (e) {
@@ -1805,8 +1812,8 @@ function AgentLiveChat() {
     if (!input.trim() || status !== "active") return;
     const text = input.trim();
     setInput("");
-    // Capture real timestamp when message is sent
-    const ts_start = Date.now() / 1000;
+    // Capture relative timestamp when message is sent
+    const ts_start = getRelativeTimestamp();
     historyRef.current = [...historyRef.current, { role: "agent", text, ts_start }];
     setMessages(prev => [...prev, { role: "agent", text, time: now() }]);
     const tips = [
@@ -1821,16 +1828,16 @@ function AgentLiveChat() {
     setBotTyping(true);
     try {
       const r = await simulation.turn({ scenario_id: session.scenario.id, agent_text: text, history: historyRef.current.map(t => ({ role: t.role, text: t.text })) });
-      // Mark end of agent turn and start of customer turn
-      const ts_end = Date.now() / 1000;
+      // Mark end of agent turn
+      const ts_end = getRelativeTimestamp();
       historyRef.current[historyRef.current.length - 1].ts_end = ts_end;
       
       const customerText = r.data.customer_text;
-      const customer_ts_start = Date.now() / 1000;
+      const customer_ts_start = getRelativeTimestamp();
       historyRef.current = [...historyRef.current, { role: "customer", text: customerText, ts_start: customer_ts_start }];
       setMessages(prev => [...prev, { role: "customer", text: customerText, time: now() }]);
     } catch {
-      const ts_end = Date.now() / 1000;
+      const ts_end = getRelativeTimestamp();
       historyRef.current[historyRef.current.length - 1].ts_end = ts_end;
       setMessages(prev => [...prev, { role: "customer", text: "(No reply — check connection)", time: now() }]);
     } finally { setBotTyping(false); }
@@ -1841,13 +1848,13 @@ function AgentLiveChat() {
     try {
       // Mark end of last turn if not already marked
       if (historyRef.current.length > 0 && !historyRef.current[historyRef.current.length - 1].ts_end) {
-        historyRef.current[historyRef.current.length - 1].ts_end = Date.now() / 1000;
+        historyRef.current[historyRef.current.length - 1].ts_end = getRelativeTimestamp();
       }
       
-      // Calculate total duration and fill in any missing timestamps
+      // Calculate total duration
       const turns = historyRef.current.map((t, i) => {
-        const ts_start = t.ts_start || i * 10;
-        const ts_end = t.ts_end || ts_start + 8;
+        const ts_start = t.ts_start !== undefined ? t.ts_start : i * 5;
+        const ts_end = t.ts_end !== undefined ? t.ts_end : ts_start + 3;
         return { role: t.role, text: t.text, ts_start, ts_end };
       });
       
@@ -1986,6 +1993,7 @@ function AgentVoiceCall() {
   const speakIntervalRef    = useRef(null);   // Word-reveal interval for live transcript
   const liveSpeakingRef    = useRef(null);   // Mirrors liveSpeaking — lets endCall commit partially-heard text
   const customerGenderRef  = useRef("female"); // Fixed gender for the entire call — set once in startCall
+  const callStartTimeRef   = useRef(null);   // Call start time for relative timestamps
 
   useEffect(() => {
     agents.me().then(r => setAgentInfo(r.data)).catch(() => {});
@@ -2008,6 +2016,10 @@ function AgentVoiceCall() {
 
   const fmt = s => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
   const now  = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const getRelativeTimestamp = () => {
+    if (!callStartTimeRef.current) return 0;
+    return (Date.now() - callStartTimeRef.current) / 1000;
+  };
 
   // startWordReveal: animates text word-by-word into liveSpeaking over audioDurationMs.
   // When the actual audio ends (onDone fires), the interval is already done or gets
@@ -2130,26 +2142,26 @@ function AgentVoiceCall() {
     rec.onresult = async e => {
       const text = e.results[0]?.[0]?.transcript?.trim();
       if (!text || !isActiveRef.current) return;
-      // Capture timestamp when speech is recognized
-      const agent_ts_start = Date.now() / 1000;
+      // Capture relative timestamp when speech is recognized
+      const agent_ts_start = getRelativeTimestamp();
       historyRef.current = [...historyRef.current, { role: "agent", text, ts_start: agent_ts_start }];
       setTranscript(prev => [...prev, { role: "agent", text, time: now() }]);
       setCallState("speaking");
       setStatusMsg("🤖 Customer is responding...");
       try {
         const r = await simulation.turn({ scenario_id: sessionRef.current.scenario.id, agent_text: text, history: historyRef.current.map(t => ({ role: t.role, text: t.text })) });
-        const agent_ts_end = Date.now() / 1000;
+        const agent_ts_end = getRelativeTimestamp();
         historyRef.current[historyRef.current.length - 1].ts_end = agent_ts_end;
         
         const reply = r.data.customer_text;
         // Do NOT add customer turn to history/transcript yet — wait until
         // speak() finishes so the transcript only shows what was actually heard.
         setStatusMsg("🔊 Customer speaking...");
-        const customer_ts_start = Date.now() / 1000;
+        const customer_ts_start = getRelativeTimestamp();
         speak(reply, () => {
           // Guard: call may have been ended while customer was speaking.
           if (!isActiveRef.current) return;
-          const customer_ts_end = Date.now() / 1000;
+          const customer_ts_end = getRelativeTimestamp();
           historyRef.current = [...historyRef.current, { role: "customer", text: reply, ts_start: customer_ts_start, ts_end: customer_ts_end }];
           setTranscript(prev => [...prev, { role: "customer", text: reply, time: now() }]);
           startListening();
@@ -2168,6 +2180,7 @@ function AgentVoiceCall() {
     try {
       const r = await simulation.start("phone");
       setSessionData(r.data); sessionRef.current = r.data;
+      callStartTimeRef.current = Date.now();
       setDuration(0);
       timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
       isActiveRef.current = true;
@@ -2208,7 +2221,8 @@ function AgentVoiceCall() {
       setCallState("speaking"); setStatusMsg("🔊 Customer speaking — listen carefully...");
       const doSpeak = () => speak(opening, () => {
         if (!isActiveRef.current) return;
-        historyRef.current = [{ role: "customer", text: opening }];
+        const ts_start = getRelativeTimestamp();
+        historyRef.current = [{ role: "customer", text: opening, ts_start, ts_end: ts_start + 3 }];
         setTranscript([{ role: "customer", text: opening, time: now() }]);
         startListening();
       });
@@ -2234,7 +2248,7 @@ function AgentVoiceCall() {
     clearInterval(speakIntervalRef.current);
     const partialSpoken = liveSpeakingRef.current?.partial?.trim();
     if (partialSpoken) {
-      const ts_start = Date.now() / 1000;
+      const ts_start = getRelativeTimestamp();
       historyRef.current = [...historyRef.current, { role: "customer", text: partialSpoken, ts_start }];
       setTranscript(prev => [...prev, { role: "customer", text: partialSpoken, time: now() }]);
     }
@@ -2265,15 +2279,15 @@ function AgentVoiceCall() {
     try {
       // Mark end of last turn if not already marked
       if (historyRef.current.length > 0 && !historyRef.current[historyRef.current.length - 1].ts_end) {
-        historyRef.current[historyRef.current.length - 1].ts_end = Date.now() / 1000;
+        historyRef.current[historyRef.current.length - 1].ts_end = getRelativeTimestamp();
       }
       
       // Use actual timestamps from turns, fallback only if missing
       const turns = historyRef.current.map(t => ({
         role: t.role,
         text: t.text,
-        ts_start: t.ts_start || 0,
-        ts_end: t.ts_end || (t.ts_start || 0) + 5
+        ts_start: t.ts_start !== undefined ? t.ts_start : 0,
+        ts_end: t.ts_end !== undefined ? t.ts_end : (t.ts_start || 0) + 3
       }));
       
       const res = await transcripts.ingest({ call_ref: sessionRef.current?.call_ref || `SIM-P${Date.now()}`, agent_id: agentInfo?.id || "", channel: "phone", duration_sec: duration, turns });
