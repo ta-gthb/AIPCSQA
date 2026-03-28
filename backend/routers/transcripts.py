@@ -207,6 +207,30 @@ async def upload_recording(
 				print(f"[DEBUG] AssemblyAI Timestamps for call {call_ref}:")
 				for i, turn in enumerate(turns):
 					print(f"  Turn {i+1} ({turn['role']}): {turn['ts_start']:.1f}s-{turn['ts_end']:.1f}s | {turn['text'][:50]}")
+				
+				# Auto-detect and fix speaker roles if needed
+				# Check if the roles seem swapped based on content patterns
+				agent_phrases = ["order id", "reference", "eligible for", "i can", "we can", "i will", "we will", "sorry", "apologize", "replacement"]
+				customer_phrases = ["i bought", "i have", "i want", "please", "can you", "could you", "why", "what", "when", "thank you"]
+				
+				agent_count = 0
+				customer_count = 0
+				for turn in turns:
+					text_lower = turn["text"].lower()
+					for phrase in agent_phrases:
+						if phrase in text_lower:
+							agent_count += 1
+							break
+					for phrase in customer_phrases:
+						if phrase in text_lower:
+							customer_count += 1
+							break
+				
+				# If roles seem significantly reversed, swap them all
+				if customer_count > agent_count * 1.5:  # Likely roles are swapped
+					print(f"[DEBUG] Detected swapped roles (customer phrases: {customer_count}, agent phrases: {agent_count}). Swapping all roles...")
+					for turn in turns:
+						turn["role"] = "customer" if turn["role"] == "agent" else "agent"
 
 		except Exception as exc:
 			transcript_error = str(exc)
