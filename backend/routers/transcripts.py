@@ -1,4 +1,4 @@
-import uuid, json, os
+import uuid, json, os, asyncio
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -15,9 +15,13 @@ from services.ai_auditor import audit_transcript, enrich_turns_with_expressions
 from services.scoring import refresh_agent_stats
 from websocket_manager import manager
 from config import settings
+from openai import AsyncOpenAI
 import datetime
 
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
+
+# Initialize LLM client
+llm_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_BASE_URL)
 
 class TurnIn(BaseModel):
 	role:     str
@@ -31,6 +35,82 @@ class TranscriptIn(BaseModel):
 	channel:      str = "phone"
 	duration_sec: int = 0
 	turns:        list[TurnIn]
+
+async def _verify_and_correct_speaker_roles(turns: list[dict]) -> list[dict]:
+	"""
+	Use LLM to analyze each turn's content and determine if it's from a customer or agent.
+	Returns corrected turns with proper roles assigned.
+	"""
+	if not turns or len(turns) < 2:
+		return turns
+	
+	# Build context of the conversation
+	transcript_context = "\n".join([f"Turn {i+1}: {t['text'][:100]}" for i, t in enumerate(turns[:10])])
+	
+	# Ask LLM to analyze each turn
+	prompt = f"""You are a customer support conversation analyzer. Analyze this call transcript and determine for each turn whether the speaker is a CUSTOMER or an AGENT.
+
+CONTEXT: This is a customer support call where a customer called Flipkart about a product issue.
+
+Call transcript (first 10 turns):
+{transcript_context}
+
+For the FULL transcript below, respond with a JSON array indicating the correct role for each turn.
+Rules:
+- CUSTOMER: Calling about their issue, asking for help, providing their information (order ID, etc.), expressing frustration
+- AGENT: Providing customer support, acknowledging the issue, explaining policies, offering solutions, saying things like "thank you for calling"
+
+Full transcript:
+{json.dumps([{{"text": t["text"][:150], "current_role": t["role"]}} for t in turns])}
+
+Respond ONLY with a valid JSON array of roles (no other text):
+["AGENT_OR_CUSTOMER", "AGENT_OR_CUSTOMER", ...]
+
+Make the roles AGENT or CUSTOMER (uppercase)."""
+
+	try:
+		response = await llm_client.chat.completions.create(
+			model="llama-3.3-70b-versatile",
+			max_tokens=500,
+			temperature=0.2,
+			messages=[
+				{"role": "system", "content": "You are an expert at analyzing customer support conversations. Respond with ONLY valid JSON."},
+				{"role": "user", "content": prompt}
+			]
+		)
+		
+		raw_response = response.choices[0].message.content.strip()
+		
+		# Parse JSON response
+		detected_roles = json.loads(raw_response)
+		
+		if len(detected_roles) != len(turns):
+			print(f"[WARNING] LLM returned {len(detected_roles)} roles but transcript has {len(turns)} turns. Using original roles.")
+			return turns
+		
+		# Update turns with detected roles
+		corrected_turns = []
+		role_changes = 0
+		for i, turn in enumerate(turns):
+			detected_role = detected_roles[i].upper()
+			if detected_role not in ("AGENT", "CUSTOMER"):
+				detected_role = turn["role"]  # Fallback to original if invalid
+			
+			new_turn = turn.copy()
+			if new_turn["role"] != detected_role.lower():
+				role_changes += 1
+				print(f"  [ROLE CHANGE] Turn {i+1}: {turn['role']} → {detected_role.lower()} | {turn['text'][:60]}")
+			
+			new_turn["role"] = detected_role.lower()
+			corrected_turns.append(new_turn)
+		
+		print(f"[DEBUG] LLM detected {role_changes} role corrections out of {len(turns)} turns")
+		return corrected_turns
+		
+	except Exception as e:
+		print(f"[ERROR] LLM role verification failed: {e}")
+		print("[DEBUG] Falling back to original roles")
+		return turns
 
 async def _persist_audit(call_id: str, agent_id: str, turns: list[dict]):
 	"""Background task: uses its own DB session to avoid closed-session errors."""
@@ -208,32 +288,11 @@ async def upload_recording(
 				for i, turn in enumerate(turns):
 					print(f"  Turn {i+1} ({turn['role']}): {turn['ts_start']:.1f}s-{turn['ts_end']:.1f}s | {turn['text'][:50]}")
 				
-				# Auto-detect and fix speaker roles if they're reversed
-				# Strategy: Check patterns in the turns to detect role reversal
-				agent_indicators = 0  # phrases that indicate agent role
-				customer_indicators = 0  # phrases that indicate customer role
-				
-				for turn in turns:
-					text_lower = turn["text"].lower()
-					
-					# Customer indicators: they're calling with a problem
-					if any(x in text_lower for x in ["i bought", "i have", "i want", "please", "can you", "could you", "my order", "problem", "issue", "complaint"]):
-						customer_indicators += 1
-					
-					# Agent indicators: they're helping/responding
-					elif any(x in text_lower for x in ["order id", "eligible for", "replacement", "sorry", "apologize", "refund", "appreciate", "thank you for calling", "customer support"]):
-						agent_indicators += 1
-				
-				# If customer indicators significantly outnumber agent indicators, roles are likely swapped
-				needs_swap = customer_indicators > max(agent_indicators, 2)  # at least 2 agent indicators to avoid swap
-				
-				if needs_swap and len(turns) > 2:
-					print(f"[DEBUG] Detected reversed roles (customer patterns: {customer_indicators}, agent patterns: {agent_indicators}). Swapping all roles...")
-					for turn in turns:
-						turn["role"] = "customer" if turn["role"] == "agent" else "agent"
-					print("[DEBUG] ✅ Roles successfully swapped")
-				else:
-					print(f"[DEBUG] Role validation: customer patterns={customer_indicators}, agent patterns={agent_indicators}, swap={needs_swap}")
+				# Use LLM to intelligently detect correct speaker roles based on content
+				print("[DEBUG] Using LLM to verify and correct speaker roles...")
+				corrected_turns = await _verify_and_correct_speaker_roles(turns)
+				turns = corrected_turns
+				print("[DEBUG] ✅ Speaker roles verified by AI")
 
 		except Exception as exc:
 			transcript_error = str(exc)
