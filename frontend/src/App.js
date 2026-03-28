@@ -144,8 +144,38 @@ function WaveformAudioPlayer({ src, mimeType }) {
   const handlePlaybackRateChange = (e) => {
     const rate = parseFloat(e.target.value);
     setPlaybackRate(rate);
-    if (wsRef.current && wsRef.current.backend && wsRef.current.backend.mediaElement) {
-      wsRef.current.backend.mediaElement.playbackRate = rate;
+    
+    if (wsRef.current) {
+      // Try multiple approaches to set playback rate
+      
+      // Approach 1: Check if getMediaElement exists (some WaveSurfer versions)
+      if (typeof wsRef.current.getMediaElement === 'function') {
+        const mediaEl = wsRef.current.getMediaElement();
+        if (mediaEl) {
+          mediaEl.playbackRate = rate;
+          return;
+        }
+      }
+      
+      // Approach 2: Try to find audio element in the container
+      if (containerRef.current) {
+        const audioEl = containerRef.current.querySelector('audio');
+        if (audioEl) {
+          audioEl.playbackRate = rate;
+          return;
+        }
+      }
+      
+      // Approach 3: Try backend.mediaElement
+      if (wsRef.current.backend && wsRef.current.backend.mediaElement) {
+        wsRef.current.backend.mediaElement.playbackRate = rate;
+        return;
+      }
+      
+      // Approach 4: Try backend.media
+      if (wsRef.current.backend && wsRef.current.backend.media) {
+        wsRef.current.backend.media.playbackRate = rate;
+      }
     }
   };
 
