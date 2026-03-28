@@ -203,3 +203,57 @@ Respond with ONLY the JSON object, no markdown or extra text."""
 		enriched.append(enriched_turn)
 	
 	return enriched
+
+async def get_quick_response_suggestions(turns: list[dict], current_customer_message: str) -> list[str]:
+	"""Generate context-aware quick response suggestions based on customer message."""
+	try:
+		# Format conversation history
+		history = "\n".join([
+			f"{t.get('role', 'unknown').upper()}: {t.get('text', '')}"
+			for t in turns[-5:]  # Last 5 turns for context
+		])
+		
+		history_text = f"Recent conversation:\n{history}\n\nLatest customer message: {current_customer_message}"
+		
+		response = await client.chat.completions.create(
+			model="gpt-3.5-turbo",
+			messages=[
+				{
+					"role": "system",
+					"content": """You are a helpful customer support assistant. Generate 5 contextually relevant, 
+professional quick response suggestions for the agent to use. These should be natural, empathetic, 
+and address the customer's concern. Return ONLY a JSON array of 5 strings, nothing else.
+Example: ["Response 1", "Response 2", "Response 3", "Response 4", "Response 5"]"""
+				},
+				{
+					"role": "user",
+					"content": history_text
+				}
+			],
+			temperature=0.7,
+			max_tokens=500,
+		)
+		
+		# Parse the response
+		content = response.choices[0].message.content.strip()
+		
+		# Try to extract JSON array
+		if "[" in content and "]" in content:
+			start = content.find("[")
+			end = content.rfind("]") + 1
+			json_str = content[start:end]
+			suggestions = json.loads(json_str)
+			
+			# Validate and filter
+			suggestions = [
+				s.strip('"\'') for s in suggestions
+				if isinstance(s, str) and len(s.strip()) > 5
+			][:5]  # Return up to 5 suggestions
+			
+			return suggestions if suggestions else []
+		
+		return []
+		
+	except Exception as e:
+		print(f"Error generating quick responses: {e}")
+		return []

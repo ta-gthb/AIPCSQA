@@ -1779,6 +1779,8 @@ function AgentLiveChat() {
   const [auditResult, setAuditResult] = useState("");
   const [agentInfo,   setAgentInfo]   = useState(null);
   const [startErr,    setStartErr]    = useState("");
+  const [quickResponses, setQuickResponses] = useState([]);
+  const [loadingResponses, setLoadingResponses] = useState(false);
   const bottomRef  = useRef(null);
   const historyRef = useRef([]);
   const chatStartTimeRef = useRef(null);
@@ -1791,6 +1793,22 @@ function AgentLiveChat() {
   const getRelativeTimestamp = () => {
     if (!chatStartTimeRef.current) return 0;
     return (Date.now() - chatStartTimeRef.current) / 1000;
+  };
+
+  const generateQuickResponses = async (history, lastCustomerMessage) => {
+    setLoadingResponses(true);
+    try {
+      const r = await live.generateQuickResponses({
+        recent_turns: history,
+        current_customer_message: lastCustomerMessage
+      });
+      setQuickResponses(r.data.suggestions || []);
+    } catch (err) {
+      console.log("Quick response generation failed:", err);
+      // Keep existing responses as fallback
+    } finally {
+      setLoadingResponses(false);
+    }
   };
 
   const startChat = async () => {
@@ -1836,6 +1854,9 @@ function AgentLiveChat() {
       const customer_ts_start = getRelativeTimestamp();
       historyRef.current = [...historyRef.current, { role: "customer", text: customerText, ts_start: customer_ts_start }];
       setMessages(prev => [...prev, { role: "customer", text: customerText, time: now() }]);
+      
+      // Generate AI-powered quick responses for the new customer message
+      generateQuickResponses(historyRef.current, customerText);
     } catch {
       const ts_end = getRelativeTimestamp();
       historyRef.current[historyRef.current.length - 1].ts_end = ts_end;
@@ -1944,10 +1965,16 @@ function AgentLiveChat() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={S.card}>
-            <div style={S.sec}>Quick Responses</div>
-            {["Thank you for reaching out. Let me check that right away.", "I completely understand your frustration. I'm here to help.", "Could you provide your account number so I can look into this?", "I've escalated this — you'll hear back within 24 hours.", "Is there anything else I can help you with today?"].map((qr, i) => (
-              <div key={i} onClick={() => status === "active" && setInput(qr)} style={{ padding: "8px 10px", marginBottom: 6, background: t.surface2, borderRadius: 6, border: `1px solid ${t.border}`, cursor: status === "active" ? "pointer" : "default", fontSize: 12, lineHeight: 1.5 }}>{qr}</div>
-            ))}
+            <div style={S.sec}>Quick Responses {loadingResponses && "🤖"}</div>
+            {quickResponses.length > 0 ? (
+              quickResponses.map((qr, i) => (
+                <div key={i} onClick={() => status === "active" && setInput(qr)} style={{ padding: "8px 10px", marginBottom: 6, background: t.surface2, borderRadius: 6, border: `1px solid ${t.border}`, cursor: status === "active" ? "pointer" : "default", fontSize: 12, lineHeight: 1.5 }}>{qr}</div>
+              ))
+            ) : (
+              <div style={{ padding: "12px", color: t.muted, fontSize: 12, textAlign: "center" }}>
+                {loadingResponses ? "Generating AI suggestions..." : "AI suggestions will appear after customer's first message"}
+              </div>
+            )}
           </div>
           <div style={S.card}>
             <div style={S.sec}>Session Info</div>

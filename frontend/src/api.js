@@ -83,8 +83,9 @@ export const reports = {
 };
 
 export const live = {
-  activeCalls: ()     => api.get("/live/active-calls"),
-  whisper:     (data) => api.post("/live/whisper", data),
+  activeCalls:          ()     => api.get("/live/active-calls"),
+  whisper:              (data) => api.post("/live/whisper", data),
+  generateQuickResponses: (data) => api.post("/live/quick-responses", data),
 };
 
 export const simulation = {
