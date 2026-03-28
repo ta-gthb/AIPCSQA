@@ -1,4 +1,4 @@
-import uuid, json, os, asyncio
+import uuid, json, os
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -15,13 +15,9 @@ from services.ai_auditor import audit_transcript, enrich_turns_with_expressions
 from services.scoring import refresh_agent_stats
 from websocket_manager import manager
 from config import settings
-from openai import AsyncOpenAI
 import datetime
 
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
-
-# Initialize LLM client
-llm_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_BASE_URL)
 
 class TurnIn(BaseModel):
 	role:     str
@@ -35,109 +31,6 @@ class TranscriptIn(BaseModel):
 	channel:      str = "phone"
 	duration_sec: int = 0
 	turns:        list[TurnIn]
-
-async def _verify_and_correct_speaker_roles(turns: list[dict]) -> list[dict]:
-	"""
-	Use LLM to analyze each turn's content and determine if it's from a customer or agent.
-	Returns corrected turns with proper roles assigned.
-	"""
-	if not turns or len(turns) < 2:
-		return turns
-	
-	# Build context of the conversation
-	transcript_context = "\n".join([f"Turn {i+1}: {t['text'][:100]}" for i, t in enumerate(turns[:10])])
-	
-	# Ask LLM to analyze each turn
-	prompt = f"""You are a customer support conversation analyzer. Analyze this call transcript and determine for each turn whether the speaker is a CUSTOMER or an AGENT.
-
-CONTEXT: This is a customer support call where a customer called Flipkart about a product issue.
-
-Call transcript (first 10 turns):
-{transcript_context}
-
-For the FULL transcript below, respond with a JSON array indicating the correct role for each turn.
-Rules:
-- CUSTOMER: Calling about their issue, asking for help, providing their information (order ID, etc.), expressing frustration
-- AGENT: Providing customer support, acknowledging the issue, explaining policies, offering solutions, saying things like "thank you for calling"
-
-Full transcript:
-{json.dumps([{{"text": t["text"][:150], "current_role": t["role"]}} for t in turns])}
-
-Respond ONLY with a valid JSON array of roles (no other text):
-["agent", "customer", "agent", "customer", ...]
-
-Make the roles lowercase: "agent" or "customer"."""
-
-	try:
-		response = await llm_client.chat.completions.create(
-			model="llama-3.3-70b-versatile",
-			max_tokens=500,
-			temperature=0.2,
-			messages=[
-				{"role": "system", "content": "You are an expert at analyzing customer support conversations. Respond with ONLY valid JSON array."},
-				{"role": "user", "content": prompt}
-			]
-		)
-		
-		raw_response = response.choices[0].message.content.strip()
-		print(f"[DEBUG] LLM Response: {raw_response[:100]}...")
-		
-		# Parse JSON response
-		try:
-			detected_roles = json.loads(raw_response)
-		except json.JSONDecodeError:
-			print(f"[ERROR] Could not parse JSON from LLM: {raw_response[:200]}")
-			return turns
-		
-		# Handle case where LLM returns a dict with "roles" key
-		if isinstance(detected_roles, dict):
-			detected_roles = detected_roles.get("roles", [])
-			if not detected_roles:
-				print("[ERROR] LLM returned dict but no 'roles' key found")
-				return turns
-		
-		if not isinstance(detected_roles, list):
-			print(f"[ERROR] LLM response is not a list: {type(detected_roles)}")
-			return turns
-		
-		if len(detected_roles) != len(turns):
-			print(f"[WARNING] LLM returned {len(detected_roles)} roles but transcript has {len(turns)} turns. Using original roles.")
-			return turns
-		
-		# Update turns with detected roles
-		corrected_turns = []
-		role_changes = 0
-		for i, turn in enumerate(turns):
-			detected_role = detected_roles[i]
-			
-			# Ensure it's a string and normalize to lowercase
-			if not isinstance(detected_role, str):
-				print(f"[WARNING] Role at index {i} is not a string: {detected_role}")
-				detected_role = turn["role"]
-			else:
-				detected_role = detected_role.lower().strip()
-				
-			if detected_role not in ("agent", "customer"):
-				print(f"[WARNING] Invalid role '{detected_role}' at turn {i+1}, using original")
-				detected_role = turn["role"]
-			
-			new_turn = turn.copy()
-			if new_turn["role"] != detected_role:
-				role_changes += 1
-				print(f"  [ROLE CHANGE] Turn {i+1}: {turn['role']} → {detected_role} | {turn['text'][:60]}")
-			
-			new_turn["role"] = detected_role
-			corrected_turns.append(new_turn)
-		
-		print(f"[DEBUG] LLM detected {role_changes} role corrections out of {len(turns)} turns")
-		return corrected_turns
-		
-	except Exception as e:
-		print(f"[ERROR] LLM role verification failed: {e}")
-		import traceback
-		traceback.print_exc()
-		print("[DEBUG] Falling back to original roles")
-		return turns
 
 async def _persist_audit(call_id: str, agent_id: str, turns: list[dict]):
 	"""Background task: uses its own DB session to avoid closed-session errors."""
@@ -309,21 +202,9 @@ async def upload_recording(
 				plain = result.text or "[empty transcription]"
 				turns = [{"role": "agent", "text": plain, "ts_start": 0.0, "ts_end": 0.0}]
 				raw_text_parts = [plain]
-			else:
-				# Log timestamps for debugging
-				print(f"[DEBUG] AssemblyAI Timestamps for call {call_ref}:")
-				for i, turn in enumerate(turns):
-					print(f"  Turn {i+1} ({turn['role']}): {turn['ts_start']:.1f}s-{turn['ts_end']:.1f}s | {turn['text'][:50]}")
-				
-				# Use LLM to intelligently detect correct speaker roles based on content
-				print("[DEBUG] Using LLM to verify and correct speaker roles...")
-				corrected_turns = await _verify_and_correct_speaker_roles(turns)
-				turns = corrected_turns
-				print("[DEBUG] ✅ Speaker roles verified by AI")
 
 		except Exception as exc:
 			transcript_error = str(exc)
-			print(f"[ERROR] Transcription failed: {exc}")
 			# Graceful degradation: store a placeholder turn so the call record is usable
 			turns = [{"role": "agent", "text": f"[Transcription unavailable: {exc}]", "ts_start": 0.0, "ts_end": 0.0}]
 			raw_text_parts = [turns[0]["text"]]
