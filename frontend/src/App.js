@@ -74,6 +74,7 @@ function WaveformAudioPlayer({ src, mimeType }) {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [hoverState, setHoverState] = useState(false);
 
   useEffect(() => {
     if (!src || !containerRef.current) return undefined;
@@ -89,13 +90,14 @@ function WaveformAudioPlayer({ src, mimeType }) {
 
         wsRef.current = WaveSurfer.create({
           container: containerRef.current,
-          waveColor: t.border,
-          progressColor: t.amber,
+          waveColor: `${t.blue}55`,
+          progressColor: `linear-gradient(to right, ${t.amber}, ${t.blue})`,
           cursorColor: t.amber,
-          barWidth: 2,
-          barRadius: 3,
-          barGap: 4,
-          height: 56,
+          cursorWidth: 3,
+          barWidth: 3,
+          barRadius: 4,
+          barGap: 5,
+          height: 70,
           responsive: true,
           autoplay: false,
           url: src,
@@ -146,9 +148,6 @@ function WaveformAudioPlayer({ src, mimeType }) {
     setPlaybackRate(rate);
     
     if (wsRef.current) {
-      // Try multiple approaches to set playback rate
-      
-      // Approach 1: Check if getMediaElement exists (some WaveSurfer versions)
       if (typeof wsRef.current.getMediaElement === 'function') {
         const mediaEl = wsRef.current.getMediaElement();
         if (mediaEl) {
@@ -157,7 +156,6 @@ function WaveformAudioPlayer({ src, mimeType }) {
         }
       }
       
-      // Approach 2: Try to find audio element in the container
       if (containerRef.current) {
         const audioEl = containerRef.current.querySelector('audio');
         if (audioEl) {
@@ -166,13 +164,11 @@ function WaveformAudioPlayer({ src, mimeType }) {
         }
       }
       
-      // Approach 3: Try backend.mediaElement
       if (wsRef.current.backend && wsRef.current.backend.mediaElement) {
         wsRef.current.backend.mediaElement.playbackRate = rate;
         return;
       }
       
-      // Approach 4: Try backend.media
       if (wsRef.current.backend && wsRef.current.backend.media) {
         wsRef.current.backend.media.playbackRate = rate;
       }
@@ -183,7 +179,6 @@ function WaveformAudioPlayer({ src, mimeType }) {
     if (!src) return;
     
     try {
-      // Try to download the file
       const response = await fetch(src);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -196,7 +191,6 @@ function WaveformAudioPlayer({ src, mimeType }) {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Download failed:", err);
-      // Fallback: try direct download
       const link = document.createElement("a");
       link.href = src;
       link.download = `audio-recording-${Date.now()}`;
@@ -213,55 +207,120 @@ function WaveformAudioPlayer({ src, mimeType }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {/* Main player controls */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <button
-          onClick={togglePlayPause}
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: "50%",
-            background: t.amber,
-            border: "none",
-            color: "#000",
-            fontSize: 20,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 700,
-            transition: "all 0.2s",
-            boxShadow: `0 4px 12px ${t.amber}40`,
-            hover: { transform: "scale(1.05)" },
-          }}
-          onMouseEnter={(e) => (e.target.style.transform = "scale(1.08)")}
-          onMouseLeave={(e) => (e.target.style.transform = "scale(1)")}
-        >
-          {isPlaying ? "⏸" : "▶"}
-        </button>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-          <div
-            ref={containerRef}
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Main player card with glassmorphism */}
+      <div 
+        style={{
+          background: `linear-gradient(135deg, ${t.surface}dd, ${t.surface2}dd)`,
+          backdropFilter: "blur(10px)",
+          borderRadius: 16,
+          border: `1px solid ${t.amber}30`,
+          padding: "16px 16px 14px",
+          boxShadow: `0 8px 32px ${t.bg}80, inset 0 1px 0 ${t.amber}20`,
+          transition: "all 0.3s ease",
+        }}
+        onMouseEnter={() => setHoverState(true)}
+        onMouseLeave={() => setHoverState(false)}
+      >
+        {/* PlayPause Button + Waveform */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
+          <button
+            onClick={togglePlayPause}
             style={{
-              borderRadius: 8,
-              overflow: "hidden",
-              background: t.surface,
-              border: `1px solid ${t.border}`,
+              width: 48,
+              height: 48,
+              borderRadius: "50%",
+              background: `linear-gradient(135deg, ${t.amber}, ${t.amber}dd)`,
+              border: "none",
+              color: "#000",
+              fontSize: 22,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: 700,
+              transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+              boxShadow: `0 6px 20px ${t.amber}50, inset 0 1px 0 ${t.amber}80`,
+              transform: isPlaying ? "scale(1)" : "scale(1)",
+              flexShrink: 0,
             }}
-          />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.muted }}>
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(duration)}</span>
+            onMouseEnter={(e) => {
+              e.target.style.transform = "scale(1.12)";
+              e.target.style.boxShadow = `0 10px 30px ${t.amber}70, inset 0 1px 0 ${t.amber}80`;
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = "scale(1)";
+              e.target.style.boxShadow = `0 6px 20px ${t.amber}50, inset 0 1px 0 ${t.amber}80`;
+            }}
+          >
+            {isPlaying ? "⏸" : "▶"}
+          </button>
+          
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+            {/* Waveform Container */}
+            <div
+              ref={containerRef}
+              style={{
+                borderRadius: 12,
+                overflow: "hidden",
+                background: `linear-gradient(180deg, ${t.surface2}, ${t.bg})`,
+                border: `1.5px solid ${t.blue}40`,
+                boxShadow: `inset 0 2px 8px ${t.bg}60, 0 2px 8px ${hoverState ? t.blue + "30" : t.bg + "20"}`,
+                transition: "all 0.3s ease",
+                height: 70,
+                position: "relative",
+              }}
+            >
+              {/* Gradient overlay effect */}
+              <div style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                height: "50%",
+                background: `linear-gradient(180deg, ${t.blue}10, transparent)`,
+                pointerEvents: "none",
+                borderRadius: "12px 12px 0 0",
+              }} />
+            </div>
+            
+            {/* Time display */}
+            <div style={{ display: "flex", justifyContent: "space-between", paddingX: 4, gap: 12 }}>
+              <span style={{ color: t.amber, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>
+                {formatTime(currentTime)}
+              </span>
+              <div style={{ flex: 1, height: 2, background: `${t.border}50`, borderRadius: 1, position: "relative" }}>
+                <div style={{
+                  height: "100%",
+                  width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
+                  background: `linear-gradient(90deg, ${t.amber}, ${t.blue})`,
+                  borderRadius: 1,
+                  transition: "width 0.1s linear",
+                }} />
+              </div>
+              <span style={{ color: t.muted, fontSize: 12, fontWeight: 600, letterSpacing: 0.5 }}>
+                {formatTime(duration)}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Volume, Speed, Download controls */}
-      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {/* Volume control */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 150 }}>
-          <label style={{ color: t.muted, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>🔊 Vol:</label>
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: 8, 
+          minWidth: 160,
+          background: `${t.surface}66`,
+          border: `1px solid ${t.border}`,
+          borderRadius: 10,
+          padding: "8px 12px",
+          transition: "all 0.2s ease",
+        }}>
+          <label style={{ color: t.text, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>🔊</label>
           <input
             type="range"
             min="0"
@@ -273,31 +332,37 @@ function WaveformAudioPlayer({ src, mimeType }) {
               flex: 1,
               cursor: "pointer",
               accentColor: t.amber,
+              height: 4,
             }}
           />
-          <span style={{ color: t.muted, fontSize: 11, minWidth: 25 }}>{Math.round(volume * 100)}%</span>
+          <span style={{ color: t.amber, fontSize: 11, fontWeight: 600, minWidth: 30 }}>{Math.round(volume * 100)}%</span>
         </div>
 
         {/* Playback speed control */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <label style={{ color: t.muted, fontSize: 12, fontWeight: 600 }}>⚡ Speed:</label>
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: 8,
+          background: `${t.surface}66`,
+          border: `1px solid ${t.border}`,
+          borderRadius: 10,
+          padding: "8px 12px",
+          transition: "all 0.2s ease",
+        }}>
+          <label style={{ color: t.text, fontSize: 12, fontWeight: 600 }}>⚡</label>
           <select
             value={playbackRate}
             onChange={handlePlaybackRateChange}
             style={{
-              padding: "6px 10px",
+              padding: "6px 8px",
               background: t.surface,
               border: `1px solid ${t.border}`,
               borderRadius: 6,
               color: t.text,
               fontSize: 12,
+              fontWeight: 600,
               cursor: "pointer",
-              appearance: "none",
-              backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${t.text.replace("#", "%23")}' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right 6px center",
-              backgroundSize: "18px",
-              paddingRight: 28,
+              minWidth: 60,
             }}
           >
             <option value="0.5">0.5x</option>
@@ -313,21 +378,28 @@ function WaveformAudioPlayer({ src, mimeType }) {
         <button
           onClick={handleDownload}
           style={{
-            padding: "6px 14px",
-            background: t.green,
+            padding: "8px 16px",
+            background: `linear-gradient(135deg, ${t.green}, ${t.green}dd)`,
             border: "none",
-            borderRadius: 6,
+            borderRadius: 10,
             color: "#fff",
             fontSize: 12,
             fontWeight: 600,
             cursor: "pointer",
-            transition: "all 0.2s",
+            transition: "all 0.3s ease",
             display: "flex",
             alignItems: "center",
             gap: 6,
+            boxShadow: `0 4px 12px ${t.green}40`,
           }}
-          onMouseEnter={(e) => (e.target.style.opacity = "0.8")}
-          onMouseLeave={(e) => (e.target.style.opacity = "1")}
+          onMouseEnter={(e) => {
+            e.target.style.transform = "translateY(-2px)";
+            e.target.style.boxShadow = `0 8px 20px ${t.green}60`;
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.transform = "translateY(0)";
+            e.target.style.boxShadow = `0 4px 12px ${t.green}40`;
+          }}
         >
           ⬇ Download
         </button>
