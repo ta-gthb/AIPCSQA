@@ -64,9 +64,9 @@ Full transcript:
 {json.dumps([{{"text": t["text"][:150], "current_role": t["role"]}} for t in turns])}
 
 Respond ONLY with a valid JSON array of roles (no other text):
-["AGENT_OR_CUSTOMER", "AGENT_OR_CUSTOMER", ...]
+["agent", "customer", "agent", "customer", ...]
 
-Make the roles AGENT or CUSTOMER (uppercase)."""
+Make the roles lowercase: "agent" or "customer"."""
 
 	try:
 		response = await llm_client.chat.completions.create(
@@ -74,15 +74,31 @@ Make the roles AGENT or CUSTOMER (uppercase)."""
 			max_tokens=500,
 			temperature=0.2,
 			messages=[
-				{"role": "system", "content": "You are an expert at analyzing customer support conversations. Respond with ONLY valid JSON."},
+				{"role": "system", "content": "You are an expert at analyzing customer support conversations. Respond with ONLY valid JSON array."},
 				{"role": "user", "content": prompt}
 			]
 		)
 		
 		raw_response = response.choices[0].message.content.strip()
+		print(f"[DEBUG] LLM Response: {raw_response[:100]}...")
 		
 		# Parse JSON response
-		detected_roles = json.loads(raw_response)
+		try:
+			detected_roles = json.loads(raw_response)
+		except json.JSONDecodeError:
+			print(f"[ERROR] Could not parse JSON from LLM: {raw_response[:200]}")
+			return turns
+		
+		# Handle case where LLM returns a dict with "roles" key
+		if isinstance(detected_roles, dict):
+			detected_roles = detected_roles.get("roles", [])
+			if not detected_roles:
+				print("[ERROR] LLM returned dict but no 'roles' key found")
+				return turns
+		
+		if not isinstance(detected_roles, list):
+			print(f"[ERROR] LLM response is not a list: {type(detected_roles)}")
+			return turns
 		
 		if len(detected_roles) != len(turns):
 			print(f"[WARNING] LLM returned {len(detected_roles)} roles but transcript has {len(turns)} turns. Using original roles.")
@@ -92,16 +108,25 @@ Make the roles AGENT or CUSTOMER (uppercase)."""
 		corrected_turns = []
 		role_changes = 0
 		for i, turn in enumerate(turns):
-			detected_role = detected_roles[i].upper()
-			if detected_role not in ("AGENT", "CUSTOMER"):
-				detected_role = turn["role"]  # Fallback to original if invalid
+			detected_role = detected_roles[i]
+			
+			# Ensure it's a string and normalize to lowercase
+			if not isinstance(detected_role, str):
+				print(f"[WARNING] Role at index {i} is not a string: {detected_role}")
+				detected_role = turn["role"]
+			else:
+				detected_role = detected_role.lower().strip()
+				
+			if detected_role not in ("agent", "customer"):
+				print(f"[WARNING] Invalid role '{detected_role}' at turn {i+1}, using original")
+				detected_role = turn["role"]
 			
 			new_turn = turn.copy()
-			if new_turn["role"] != detected_role.lower():
+			if new_turn["role"] != detected_role:
 				role_changes += 1
-				print(f"  [ROLE CHANGE] Turn {i+1}: {turn['role']} → {detected_role.lower()} | {turn['text'][:60]}")
+				print(f"  [ROLE CHANGE] Turn {i+1}: {turn['role']} → {detected_role} | {turn['text'][:60]}")
 			
-			new_turn["role"] = detected_role.lower()
+			new_turn["role"] = detected_role
 			corrected_turns.append(new_turn)
 		
 		print(f"[DEBUG] LLM detected {role_changes} role corrections out of {len(turns)} turns")
@@ -109,6 +134,8 @@ Make the roles AGENT or CUSTOMER (uppercase)."""
 		
 	except Exception as e:
 		print(f"[ERROR] LLM role verification failed: {e}")
+		import traceback
+		traceback.print_exc()
 		print("[DEBUG] Falling back to original roles")
 		return turns
 
