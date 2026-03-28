@@ -89,20 +89,16 @@ function WaveformAudioPlayer({ src, mimeType }) {
 
         wsRef.current = WaveSurfer.create({
           container: containerRef.current,
-          waveColor: `linear-gradient(to right, ${t.blue}40, ${t.purple}40)`,
-          progressColor: `linear-gradient(to right, ${t.amber}, ${t.blue})`,
+          waveColor: t.border,
+          progressColor: t.amber,
           cursorColor: t.amber,
-          barWidth: 3,
-          barRadius: 4,
-          barGap: 2,
-          height: 64,
+          barWidth: 2,
+          barRadius: 3,
+          barGap: 4,
+          height: 56,
           responsive: true,
           autoplay: false,
           url: src,
-          normalize: true,
-          hideScrollbar: false,
-          interact: true,
-          fillParent: true,
         });
 
         wsRef.current.on("ready", () => {
@@ -217,166 +213,124 @@ function WaveformAudioPlayer({ src, mimeType }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* Modern Waveform Player Card */}
-      <div style={{
-        background: `linear-gradient(135deg, ${t.surface}e6, ${t.surface2}e6)`,
-        backdropFilter: "blur(10px)",
-        border: `1px solid ${t.border}80`,
-        borderRadius: 16,
-        padding: 16,
-        boxShadow: `0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 ${t.border}40`,
-      }}>
-        {/* Play/Pause + Waveform Section */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
-          <button
-            onClick={togglePlayPause}
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Main player controls */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <button
+          onClick={togglePlayPause}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: "50%",
+            background: t.amber,
+            border: "none",
+            color: "#000",
+            fontSize: 20,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontWeight: 700,
+            transition: "all 0.2s",
+            boxShadow: `0 4px 12px ${t.amber}40`,
+            hover: { transform: "scale(1.05)" },
+          }}
+          onMouseEnter={(e) => (e.target.style.transform = "scale(1.08)")}
+          onMouseLeave={(e) => (e.target.style.transform = "scale(1)")}
+        >
+          {isPlaying ? "⏸" : "▶"}
+        </button>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div
+            ref={containerRef}
             style={{
-              width: 50,
-              height: 50,
-              borderRadius: "50%",
-              background: `linear-gradient(135deg, ${t.amber}, ${t.amber}dd)`,
-              border: `2px solid ${t.amber}40`,
-              color: "#000",
-              fontSize: 22,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 700,
-              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-              boxShadow: `0 8px 24px ${t.amber}40, inset 0 1px 0 ${t.amber}80`,
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.transform = "scale(1.1)";
-              e.target.style.boxShadow = `0 12px 32px ${t.amber}60, inset 0 1px 0 ${t.amber}80`;
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = "scale(1)";
-              e.target.style.boxShadow = `0 8px 24px ${t.amber}40, inset 0 1px 0 ${t.amber}80`;
-            }}
-          >
-            {isPlaying ? "⏸" : "▶"}
-          </button>
-          
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-            {/* Waveform Container */}
-            <div
-              ref={containerRef}
-              style={{
-                borderRadius: 12,
-                overflow: "hidden",
-                background: `linear-gradient(to bottom, ${t.surface2}40, ${t.surface}40)`,
-                border: `1px solid ${t.border}60`,
-                boxShadow: `inset 0 2px 8px rgba(0, 0, 0, 0.4)`,
-                minHeight: 70,
-              }}
-            />
-            
-            {/* Time Display */}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: t.muted, paddingX: 8, fontWeight: 600 }}>
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Controls Row */}
-        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          {/* Volume Control */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 160 }}>
-            <label style={{ color: t.muted, fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>🔊</label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={volume}
-              onChange={handleVolumeChange}
-              style={{
-                flex: 1,
-                cursor: "pointer",
-                accentColor: t.amber,
-                height: 5,
-                borderRadius: 3,
-                background: `linear-gradient(to right, ${t.border}80, ${t.blue}60)`,
-              }}
-            />
-            <span style={{ color: t.amber, fontSize: 12, minWidth: 28, fontWeight: 600 }}>{Math.round(volume * 100)}%</span>
-          </div>
-
-          {/* Playback Speed Control */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <label style={{ color: t.muted, fontSize: 13, fontWeight: 600 }}>⚡</label>
-            <select
-              value={playbackRate}
-              onChange={handlePlaybackRateChange}
-              style={{
-                padding: "7px 12px",
-                background: `linear-gradient(135deg, ${t.surface2}80, ${t.surface}80)`,
-                border: `1px solid ${t.border}60`,
-                borderRadius: 8,
-                color: t.text,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-                appearance: "none",
-                backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${t.text.replace("#", "%23")}' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                backgroundRepeat: "no-repeat",
-                backgroundPosition: "right 8px center",
-                backgroundSize: "16px",
-                paddingRight: 32,
-                transition: "all 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                e.style.background = `linear-gradient(135deg, ${t.surface2}, ${t.surface})`;
-                e.style.borderColor = t.amber;
-              }}
-              onMouseLeave={(e) => {
-                e.style.background = `linear-gradient(135deg, ${t.surface2}80, ${t.surface}80)`;
-                e.style.borderColor = t.border;
-              }}
-            >
-              <option value="0.5">0.5x</option>
-              <option value="0.75">0.75x</option>
-              <option value="1">1x</option>
-              <option value="1.25">1.25x</option>
-              <option value="1.5">1.5x</option>
-              <option value="2">2x</option>
-            </select>
-          </div>
-
-          {/* Download Button */}
-          <button
-            onClick={handleDownload}
-            style={{
-              padding: "7px 16px",
-              background: `linear-gradient(135deg, ${t.green}, ${t.green}dd)`,
-              border: `1px solid ${t.green}40`,
               borderRadius: 8,
-              color: "#fff",
-              fontSize: 12,
-              fontWeight: 600,
+              overflow: "hidden",
+              background: t.surface,
+              border: `1px solid ${t.border}`,
+            }}
+          />
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.muted }}>
+            <span>{formatTime(currentTime)}</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Volume, Speed, Download controls */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        {/* Volume control */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 150 }}>
+          <label style={{ color: t.muted, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>🔊 Vol:</label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={volume}
+            onChange={handleVolumeChange}
+            style={{
+              flex: 1,
               cursor: "pointer",
-              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              boxShadow: `0 4px 12px ${t.green}40`,
+              accentColor: t.amber,
             }}
-            onMouseEnter={(e) => {
-              e.style.transform = "translateY(-2px)";
-              e.style.boxShadow = `0 8px 20px ${t.green}60`;
-            }}
-            onMouseLeave={(e) => {
-              e.style.transform = "translateY(0)";
-              e.style.boxShadow = `0 4px 12px ${t.green}40`;
+          />
+          <span style={{ color: t.muted, fontSize: 11, minWidth: 25 }}>{Math.round(volume * 100)}%</span>
+        </div>
+
+        {/* Playback speed control */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <label style={{ color: t.muted, fontSize: 12, fontWeight: 600 }}>⚡ Speed:</label>
+          <select
+            value={playbackRate}
+            onChange={handlePlaybackRateChange}
+            style={{
+              padding: "6px 10px",
+              background: t.surface,
+              border: `1px solid ${t.border}`,
+              borderRadius: 6,
+              color: t.text,
+              fontSize: 12,
+              cursor: "pointer",
+              appearance: "none",
+              backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='${t.text.replace("#", "%23")}' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 6px center",
+              backgroundSize: "18px",
+              paddingRight: 28,
             }}
           >
-            ⬇ Download
-          </button>
+            <option value="0.5">0.5x</option>
+            <option value="0.75">0.75x</option>
+            <option value="1">1x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2x</option>
+          </select>
         </div>
+
+        {/* Download button */}
+        <button
+          onClick={handleDownload}
+          style={{
+            padding: "6px 14px",
+            background: t.green,
+            border: "none",
+            borderRadius: 6,
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            transition: "all 0.2s",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+          onMouseEnter={(e) => (e.target.style.opacity = "0.8")}
+          onMouseLeave={(e) => (e.target.style.opacity = "1")}
+        >
+          ⬇ Download
+        </button>
       </div>
 
       <audio ref={audioRef} src={src} type={mimeType} crossOrigin="anonymous" />
