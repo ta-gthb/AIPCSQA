@@ -67,7 +67,6 @@ function calculateSpeakingTime(turns) {
 
 function WaveformAudioPlayer({ src, mimeType }) {
   const containerRef = useRef(null);
-  const waveformWrapperRef = useRef(null);
   const audioRef = useRef(null);
   const wsRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -91,43 +90,21 @@ function WaveformAudioPlayer({ src, mimeType }) {
           waveColor: t.border,
           progressColor: t.amber,
           cursorColor: t.amber,
-          cursorWidth: 3,
           barWidth: 2,
           barRadius: 3,
           barGap: 4,
-          height: 64,
-          responsive: false,
-          minPxPerSec: 120,
-          barMinHeight: 1,
+          height: 56,
+          responsive: true,
           autoplay: false,
-          URL: src,
-          fetch: async (url) => {
-            const response = await fetch(url);
-            return response.arrayBuffer();
-          },
+          url: src,
         });
 
         wsRef.current.on("ready", () => {
-          const dur = wsRef.current.getDuration();
-          setDuration(dur);
-          // Auto-scroll waveform to keep playhead centered
-          if (waveformWrapperRef.current && containerRef.current) {
-            const w = waveformWrapperRef.current.offsetWidth;
-            const center = w / 2;
-            waveformWrapperRef.current.scrollLeft = Math.max(0, center - w / 2);
-          }
+          setDuration(wsRef.current.getDuration());
         });
 
-        wsRef.current.on("audioprocess", (currentTimeVal) => {
-          setCurrentTime(currentTimeVal);
-          // Auto-scroll to keep playhead centered during playback
-          if (waveformWrapperRef.current && containerRef.current && isPlaying) {
-            const pixelsPerSec = 120;
-            const playheadPos = currentTimeVal * pixelsPerSec;
-            const viewportWidth = waveformWrapperRef.current.offsetWidth;
-            const centerPos = playheadPos - viewportWidth / 2;
-            waveformWrapperRef.current.scrollLeft = Math.max(0, centerPos);
-          }
+        wsRef.current.on("audioprocess", () => {
+          setCurrentTime(wsRef.current.getCurrentTime());
         });
 
         wsRef.current.on("play", () => setIsPlaying(true));
@@ -146,7 +123,7 @@ function WaveformAudioPlayer({ src, mimeType }) {
         wsRef.current = null;
       }
     };
-  }, [src, mimeType, isPlaying]);
+  }, [src, mimeType]);
 
   const togglePlayPause = () => {
     if (wsRef.current) {
@@ -181,7 +158,6 @@ function WaveformAudioPlayer({ src, mimeType }) {
             transition: "all 0.2s",
             boxShadow: `0 4px 12px ${t.amber}40`,
             hover: { transform: "scale(1.05)" },
-            flexShrink: 0,
           }}
           onMouseEnter={(e) => (e.target.style.transform = "scale(1.08)")}
           onMouseLeave={(e) => (e.target.style.transform = "scale(1)")}
@@ -190,26 +166,14 @@ function WaveformAudioPlayer({ src, mimeType }) {
         </button>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
           <div
-            ref={waveformWrapperRef}
+            ref={containerRef}
             style={{
               borderRadius: 8,
-              overflow: "auto",
-              overflowY: "hidden",
+              overflow: "hidden",
               background: t.surface,
               border: `1px solid ${t.border}`,
-              scrollBehavior: "smooth",
-              position: "relative",
             }}
-          >
-            <div
-              ref={containerRef}
-              style={{
-                position: "relative",
-                width: "100%",
-                minWidth: "100%",
-              }}
-            />
-          </div>
+          />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: t.muted }}>
             <span>{formatTime(currentTime)}</span>
             <span>{formatTime(duration)}</span>
