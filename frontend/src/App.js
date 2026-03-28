@@ -136,24 +136,37 @@ function WaveformAudioPlayer({ src, mimeType }) {
   const handleVolumeChange = (e) => {
     const vol = parseFloat(e.target.value);
     setVolume(vol);
-    if (audioRef.current) {
-      audioRef.current.volume = vol;
+    if (wsRef.current && wsRef.current.setVolume) {
+      wsRef.current.setVolume(vol);
     }
   };
 
   const handlePlaybackRateChange = (e) => {
     const rate = parseFloat(e.target.value);
     setPlaybackRate(rate);
-    if (audioRef.current) {
-      audioRef.current.playbackRate = rate;
-    }
-    if (wsRef.current && wsRef.current.backend && wsRef.current.backend.audioContext) {
-      wsRef.current.backend.playbackRate = rate;
+    if (wsRef.current && wsRef.current.backend && wsRef.current.backend.mediaElement) {
+      wsRef.current.backend.mediaElement.playbackRate = rate;
     }
   };
 
-  const handleDownload = () => {
-    if (src) {
+  const handleDownload = async () => {
+    if (!src) return;
+    
+    try {
+      // Try to download the file
+      const response = await fetch(src);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `audio-recording-${Date.now()}.wav`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download failed:", err);
+      // Fallback: try direct download
       const link = document.createElement("a");
       link.href = src;
       link.download = `audio-recording-${Date.now()}`;
