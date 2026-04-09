@@ -12,9 +12,9 @@ class Settings(BaseSettings):
 	MAX_AUDIO_MB: int = 50
 	ASSEMBLYAI_API_KEY: str = ""
 	FRONTEND_URL: str = "http://localhost:3000"
-	SELF_PING_ENABLED: bool = False
+	SELF_PING_ENABLED: bool = True
 	SELF_PING_URL: str = ""
-	SELF_PING_INTERVAL_SECONDS: int = 300
+	SELF_PING_INTERVAL_SECONDS: int = 2
 
 	class Config:
 		env_file = ".env"

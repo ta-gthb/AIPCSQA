@@ -31,7 +31,7 @@ services:
     name: aipcsqa-keepalive
     runtime: python
     region: oregon
-    schedule: "*/5 * * * *"
+    schedule: "* * * * *"
     rootDir: backend
     buildCommand: ""
     startCommand: python -c "import os, urllib.request; url=os.getenv('BACKEND_HEALTH_URL','https://aipcsqa-backend.onrender.com/health'); print('Pinging', url); urllib.request.urlopen(url, timeout=20).read(); print('ok')"

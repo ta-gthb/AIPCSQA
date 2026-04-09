@@ -115,7 +115,7 @@ async def on_startup():
 	if _should_enable_self_ping():
 		url = _resolve_self_ping_url()
 		if url:
-			interval = max(60, int(settings.SELF_PING_INTERVAL_SECONDS))
+			interval = max(2, int(settings.SELF_PING_INTERVAL_SECONDS))
 			_self_ping_task = asyncio.create_task(_self_ping_worker(url, interval))
 			print(f"[self-ping] enabled: {url} every {interval}s")
 		else:
