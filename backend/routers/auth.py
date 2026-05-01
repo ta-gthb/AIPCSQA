@@ -118,3 +118,8 @@ async def change_password(
 async def me(user: User = Depends(current_user)):
 	return {"id": str(user.id), "name": user.name, "email": user.email,
 			"role": user.role, "team": user.team}
+
+@router.post("/keep-alive")
+async def keep_alive():
+	"""Health check endpoint to keep backend active - no authentication required"""
+	return {"status": "ok", "message": "Backend is active"}

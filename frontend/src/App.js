@@ -348,9 +348,30 @@ function Login({ onLogin }) {
   const [role,  setRole]  = useState("supervisor");
   const [err,   setErr]   = useState("");
   const [busy,  setBusy]  = useState(false);
+  const keepAliveIntervalRef = useRef(null);
+
+  // Keep-alive ping - triggers when sign-in button is clicked, repeats every 1 min
+  const startKeepAlive = () => {
+    // Clear any existing interval
+    if (keepAliveIntervalRef.current) {
+      clearInterval(keepAliveIntervalRef.current);
+    }
+    
+    // First ping immediately
+    auth.keepAlive().catch((e) => console.log("[keep-alive] ping failed:", e.message));
+    
+    // Then ping every 60 seconds (1 minute)
+    keepAliveIntervalRef.current = setInterval(() => {
+      auth.keepAlive().catch((e) => console.log("[keep-alive] ping failed:", e.message));
+    }, 60000);
+  };
 
   const submit = async () => {
     setBusy(true); setErr("");
+    
+    // Start keep-alive pinging when sign-in button is clicked
+    startKeepAlive();
+    
     try {
       const params = new URLSearchParams();
       params.append("username", email);
@@ -367,11 +388,21 @@ function Login({ onLogin }) {
       localStorage.setItem("token", res.data.access_token);
       localStorage.setItem("role",  res.data.role);
       localStorage.setItem("name",  res.data.name);
+      // Keep-alive will continue running even after login
       onLogin(res.data);
     } catch (e) {
       setErr(e.response?.data?.detail || "Login failed. Check credentials.");
     } finally { setBusy(false); }
   };
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (keepAliveIntervalRef.current) {
+        clearInterval(keepAliveIntervalRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div style={{ ...S.page, display: "flex", flexDirection: isMobile ? "column" : "row" }}>

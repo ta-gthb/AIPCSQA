@@ -25,6 +25,7 @@ export const auth = {
   register: (data) => api.post("/auth/register", data),
   login:    (data) => api.post("/auth/login", data, { headers: { "Content-Type": "application/x-www-form-urlencoded" } }),
   me:       ()     => api.get("/auth/me"),
+  keepAlive: () => api.post("/auth/keep-alive"),
 };
 
 export const dashboard = {
