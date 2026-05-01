@@ -358,20 +358,33 @@ function Login({ onLogin }) {
     }
     
     // First ping immediately
-    auth.keepAlive().catch((e) => console.log("[keep-alive] ping failed:", e.message));
+    console.log("[keep-alive] Starting keep-alive pings...");
+    auth.keepAlive()
+      .then(() => console.log("[keep-alive] ✓ ping successful"))
+      .catch((e) => console.log("[keep-alive] ✗ ping failed:", e.message));
     
     // Then ping every 60 seconds (1 minute)
     keepAliveIntervalRef.current = setInterval(() => {
-      auth.keepAlive().catch((e) => console.log("[keep-alive] ping failed:", e.message));
+      auth.keepAlive()
+        .then(() => console.log("[keep-alive] ✓ ping successful"))
+        .catch((e) => console.log("[keep-alive] ✗ ping failed:", e.message));
     }, 60000);
   };
 
-  const submit = async () => {
-    setBusy(true); setErr("");
-    
-    // Start keep-alive pinging when sign-in button is clicked
+  // Start keep-alive when Login page loads
+  useEffect(() => {
+    console.log("[keep-alive] Login page loaded - starting initial ping");
     startKeepAlive();
     
+    return () => {
+      if (keepAliveIntervalRef.current) {
+        clearInterval(keepAliveIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const submit = async () => {
+    setBusy(true); setErr("");
     try {
       const params = new URLSearchParams();
       params.append("username", email);
@@ -394,15 +407,6 @@ function Login({ onLogin }) {
       setErr(e.response?.data?.detail || "Login failed. Check credentials.");
     } finally { setBusy(false); }
   };
-
-  // Cleanup interval on unmount
-  useEffect(() => {
-    return () => {
-      if (keepAliveIntervalRef.current) {
-        clearInterval(keepAliveIntervalRef.current);
-      }
-    };
-  }, []);
 
   return (
     <div style={{ ...S.page, display: "flex", flexDirection: isMobile ? "column" : "row" }}>

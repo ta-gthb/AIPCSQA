@@ -122,4 +122,7 @@ async def me(user: User = Depends(current_user)):
 @router.post("/keep-alive")
 async def keep_alive():
 	"""Health check endpoint to keep backend active - no authentication required"""
+	from datetime import datetime
+	timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+	print(f"[keep-alive] ping received at {timestamp}")
 	return {"status": "ok", "message": "Backend is active"}
