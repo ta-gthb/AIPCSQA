@@ -13,6 +13,7 @@ from models.violation import Violation, Severity
 from models.agent import Agent
 from services.ai_auditor import audit_transcript, enrich_turns_with_expressions
 from services.scoring import refresh_agent_stats
+from services.firebase_storage import firebase_manager
 from websocket_manager import manager
 from config import settings
 import datetime
@@ -147,13 +148,27 @@ async def upload_recording(
 	if len(contents) > max_bytes:
 		raise HTTPException(413, f"File exceeds {settings.MAX_AUDIO_MB} MB limit")
 
-	# Persist file to disk
+	# Persist file to disk and upload to Firebase if enabled
 	os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 	ext = os.path.splitext(file.filename or "recording.mp3")[1].lower() or ".mp3"
 	saved_name = f"{uuid.uuid4()}{ext}"
 	saved_path = os.path.join(settings.UPLOAD_DIR, saved_name)
 	with open(saved_path, "wb") as fh:
 		fh.write(contents)
+
+	# Upload to Firebase if enabled
+	audio_path = saved_name  # Default: local path
+	firebase_url = None
+	if firebase_manager.enabled and firebase_manager.initialized:
+		try:
+			remote_path = f"audio/{saved_name}"
+			firebase_url = await firebase_manager.upload_file(saved_path, remote_path)
+			if firebase_url:
+				audio_path = firebase_url  # Store URL instead of local path
+				print(f"[Upload] Firebase URL stored for {saved_name}")
+		except Exception as e:
+			print(f"[Upload] Firebase upload failed, falling back to local: {e}")
+			# Continue with local path if Firebase fails
 
 	# Transcribe with AssemblyAI speaker diarization
 	transcript_error = None
@@ -220,7 +235,7 @@ async def upload_recording(
 		channel="upload",
 		status=CallStatus.processing,
 		started_at=datetime.datetime.utcnow(),
-		audio_path=saved_name,
+		audio_path=audio_path,  # URL if Firebase enabled, local filename otherwise
 	)
 	db.add(call)
 	await db.flush()

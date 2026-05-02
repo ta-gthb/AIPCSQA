@@ -145,6 +145,8 @@ app.include_router(live_monitor.router)
 app.include_router(simulation.router)
 
 # Serve uploaded recordings
+# Note: If Firebase Storage is enabled, audio files are stored as URLs
+# If Firebase is disabled, files are stored locally and served from here
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
