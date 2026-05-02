@@ -225,6 +225,12 @@ async def upload_recording(
 	db.add(call)
 	await db.flush()
 
+	# Calculate duration from turns if available
+	if turns:
+		max_end_time = max((t.get("ts_end") or 0) for t in turns)
+		if max_end_time > 0:
+			call.duration_sec = int(max_end_time) + 1  # Add 1 second buffer
+
 	transcript_row = Transcript(
 		call_id=call.id,
 		turns=turns,
@@ -284,7 +290,19 @@ async def ingest_transcript(body: TranscriptIn, bg: BackgroundTasks,
 					started_at=datetime.datetime.utcnow())
 		db.add(call)
 		await db.flush()
+	
 	turns = [t.dict() for t in body.turns]
+	
+	# If turns don't have timestamps and we have recording duration, estimate them
+	if body.duration_sec > 0 and turns:
+		has_timestamps = any(t.get("ts_start") is not None or t.get("ts_end") is not None for t in turns)
+		if not has_timestamps:
+			# Estimate timestamps: distribute turns evenly across recording duration
+			time_per_turn = body.duration_sec / len(turns) if turns else 0
+			for i, turn in enumerate(turns):
+				turn["ts_start"] = i * time_per_turn
+				turn["ts_end"] = (i + 1) * time_per_turn
+	
 	transcript = Transcript(call_id=call.id, turns=turns,
 							raw_text="\n".join(f"{t['role']}: {t['text']}" for t in turns))
 	db.add(transcript)

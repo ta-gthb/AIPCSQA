@@ -67,8 +67,8 @@ function calculateSpeakingTime(turns, recordingDuration = null) {
   agentTime = Math.round(agentTime * 10) / 10;
   customerTime = Math.round(customerTime * 10) / 10;
   
-  // Use actual recording duration as the source of truth
-  const totalTime = recordingDuration !== null ? recordingDuration : (agentTime + customerTime);
+  // Use actual recording duration if provided and > 0, otherwise use sum of turns
+  const totalTime = (recordingDuration && recordingDuration > 0) ? recordingDuration : (agentTime + customerTime);
   
   return { agentTime, customerTime, totalTime };
 }
