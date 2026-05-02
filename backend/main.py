@@ -182,3 +182,23 @@ async def get_audio(file_name: str):
 @app.get("/health")
 async def health():
 	return {"status": "ok", "service": "AIPCSQA"}
+
+@app.get("/debug/calls")
+async def debug_calls():
+	"""Debug endpoint to check if audio_path is being stored."""
+	from database import AsyncSessionLocal
+	from models.call import Call
+	from sqlalchemy import select
+	
+	async with AsyncSessionLocal() as db:
+		calls = await db.execute(select(Call).limit(5))
+		results = []
+		for call in calls.scalars():
+			results.append({
+				"id": str(call.id),
+				"call_ref": call.call_ref,
+				"audio_path": call.audio_path,
+				"channel": call.channel,
+				"status": call.status,
+			})
+		return {"calls": results}
