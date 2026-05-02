@@ -348,40 +348,6 @@ function Login({ onLogin }) {
   const [role,  setRole]  = useState("supervisor");
   const [err,   setErr]   = useState("");
   const [busy,  setBusy]  = useState(false);
-  const keepAliveIntervalRef = useRef(null);
-
-  // Keep-alive ping - triggers when sign-in button is clicked, repeats every 1 min
-  const startKeepAlive = () => {
-    // Clear any existing interval
-    if (keepAliveIntervalRef.current) {
-      clearInterval(keepAliveIntervalRef.current);
-    }
-    
-    // First ping immediately
-    console.log("[keep-alive] Starting keep-alive pings...");
-    auth.keepAlive()
-      .then(() => console.log("[keep-alive] ✓ ping successful"))
-      .catch((e) => console.log("[keep-alive] ✗ ping failed:", e.message));
-    
-    // Then ping every 60 seconds (1 minute)
-    keepAliveIntervalRef.current = setInterval(() => {
-      auth.keepAlive()
-        .then(() => console.log("[keep-alive] ✓ ping successful"))
-        .catch((e) => console.log("[keep-alive] ✗ ping failed:", e.message));
-    }, 60000);
-  };
-
-  // Start keep-alive when Login page loads
-  useEffect(() => {
-    console.log("[keep-alive] Login page loaded - starting initial ping");
-    startKeepAlive();
-    
-    return () => {
-      if (keepAliveIntervalRef.current) {
-        clearInterval(keepAliveIntervalRef.current);
-      }
-    };
-  }, []);
 
   const submit = async () => {
     setBusy(true); setErr("");
@@ -401,7 +367,6 @@ function Login({ onLogin }) {
       localStorage.setItem("token", res.data.access_token);
       localStorage.setItem("role",  res.data.role);
       localStorage.setItem("name",  res.data.name);
-      // Keep-alive will continue running even after login
       onLogin(res.data);
     } catch (e) {
       setErr(e.response?.data?.detail || "Login failed. Check credentials.");

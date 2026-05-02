@@ -13,7 +13,7 @@ from models.violation import Violation, Severity
 from models.agent import Agent
 from services.ai_auditor import audit_transcript, enrich_turns_with_expressions
 from services.scoring import refresh_agent_stats
-from services.firebase_storage import firebase_manager
+from services.storage import upload_audio_to_supabase, delete_audio_from_supabase
 from websocket_manager import manager
 from config import settings
 import datetime
@@ -148,85 +148,99 @@ async def upload_recording(
 	if len(contents) > max_bytes:
 		raise HTTPException(413, f"File exceeds {settings.MAX_AUDIO_MB} MB limit")
 
-	# Persist file to disk and upload to Firebase if enabled
-	os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+	# Generate filename and upload to Supabase Storage
 	ext = os.path.splitext(file.filename or "recording.mp3")[1].lower() or ".mp3"
 	saved_name = f"{uuid.uuid4()}{ext}"
-	saved_path = os.path.join(settings.UPLOAD_DIR, saved_name)
-	with open(saved_path, "wb") as fh:
-		fh.write(contents)
-
-	# Upload to Firebase if enabled
-	audio_path = saved_name  # Default: local path
-	firebase_url = None
-	if firebase_manager.enabled and firebase_manager.initialized:
+	
+	# Determine if using Supabase or local storage
+	if settings.USE_SUPABASE_STORAGE and settings.SUPABASE_URL and settings.SUPABASE_API_KEY:
 		try:
-			remote_path = f"audio/{saved_name}"
-			firebase_url = await firebase_manager.upload_file(saved_path, remote_path)
-			if firebase_url:
-				audio_path = firebase_url  # Store URL instead of local path
-				print(f"[Upload] Firebase URL stored for {saved_name}")
-		except Exception as e:
-			print(f"[Upload] Firebase upload failed, falling back to local: {e}")
-			# Continue with local path if Firebase fails
+			await upload_audio_to_supabase(saved_name, contents)
+		except Exception as exc:
+			print(f"[transcripts] Supabase upload failed: {exc}")
+			raise HTTPException(500, f"Failed to upload file: {exc}")
+	else:
+		# Fallback to local storage
+		os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+		saved_path = os.path.join(settings.UPLOAD_DIR, saved_name)
+		with open(saved_path, "wb") as fh:
+			fh.write(contents)
 
 	# Transcribe with AssemblyAI speaker diarization
+	# Note: AssemblyAI needs a file path, so we'll use temp file or local path
 	transcript_error = None
 	turns: list[dict] = []
 	raw_text_parts: list[str] = []
+	
+	# Create temp file for transcription if using Supabase
+	import tempfile
+	temp_file_path = None
+	try:
+		if settings.USE_SUPABASE_STORAGE and settings.SUPABASE_URL and settings.SUPABASE_API_KEY:
+			# Create temporary file for AssemblyAI transcription
+			with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+				tmp.write(contents)
+				temp_file_path = tmp.name
+				transcription_path = temp_file_path
+		else:
+			transcription_path = os.path.join(settings.UPLOAD_DIR, saved_name)
 
-	if not settings.ASSEMBLYAI_API_KEY:
-		transcript_error = "ASSEMBLYAI_API_KEY not configured"
-	else:
-		try:
-			aai.settings.api_key = settings.ASSEMBLYAI_API_KEY
-			config = aai.TranscriptionConfig(
-				speaker_labels=True,
-				speech_models=["universal-2"],
-			)
-			transcriber = aai.Transcriber()
-			# SDK is blocking — run in thread pool to avoid blocking the event loop
-			result = await asyncio.to_thread(transcriber.transcribe, saved_path, config)
+		if not settings.ASSEMBLYAI_API_KEY:
+			transcript_error = "ASSEMBLYAI_API_KEY not configured"
+		else:
+			try:
+				aai.settings.api_key = settings.ASSEMBLYAI_API_KEY
+				config = aai.TranscriptionConfig(
+					speaker_labels=True,
+					speech_models=["universal-2"],
+				)
+				transcriber = aai.Transcriber()
+				# SDK is blocking — run in thread pool to avoid blocking the event loop
+				result = await asyncio.to_thread(transcriber.transcribe, transcription_path, config)
 
-			if result.status == aai.TranscriptStatus.error:
-				raise RuntimeError(result.error)
+				if result.status == aai.TranscriptStatus.error:
+					raise RuntimeError(result.error)
 
-			# Map AssemblyAI speaker labels ("A", "B", …) to agent / customer roles.
-			# The first speaker heard is assigned the role chosen by the agent uploader.
-			speaker_map: dict[str, str] = {}
-			for utt in (result.utterances or []):
-				spk = utt.speaker
-				if spk not in speaker_map:
-					if not speaker_map:
-						# First speaker heard
-						speaker_map[spk] = first_speaker if first_speaker in ("agent", "customer") else "agent"
-					else:
-						# All subsequent new speakers get the opposite role
-						assigned = set(speaker_map.values())
-						speaker_map[spk] = "customer" if "agent" in assigned else "agent"
-				turns.append({
-					"role":     speaker_map[spk],
-					"text":     utt.text,
-					"ts_start": (utt.start or 0) / 1000.0,
-					"ts_end":   (utt.end   or 0) / 1000.0,
-				})
-				raw_text_parts.append(f"{speaker_map[spk]}: {utt.text}")
+				# Map AssemblyAI speaker labels ("A", "B", …) to agent / customer roles.
+				# The first speaker heard is assigned the role chosen by the agent uploader.
+				speaker_map: dict[str, str] = {}
+				for utt in (result.utterances or []):
+					spk = utt.speaker
+					if spk not in speaker_map:
+						if not speaker_map:
+							# First speaker heard
+							speaker_map[spk] = first_speaker if first_speaker in ("agent", "customer") else "agent"
+						else:
+							# All subsequent new speakers get the opposite role
+							assigned = set(speaker_map.values())
+							speaker_map[spk] = "customer" if "agent" in assigned else "agent"
+					turns.append({
+						"role":     speaker_map[spk],
+						"text":     utt.text,
+						"ts_start": (utt.start or 0) / 1000.0,
+						"ts_end":   (utt.end   or 0) / 1000.0,
+					})
+					raw_text_parts.append(f"{speaker_map[spk]}: {utt.text}")
 
-			if not turns:
-				# Fallback: no utterances returned — use plain transcript text
-				plain = result.text or "[empty transcription]"
-				turns = [{"role": "agent", "text": plain, "ts_start": 0.0, "ts_end": 0.0}]
-				raw_text_parts = [plain]
+				if not turns:
+					# Fallback: no utterances returned — use plain transcript text
+					plain = result.text or "[empty transcription]"
+					turns = [{"role": "agent", "text": plain, "ts_start": 0.0, "ts_end": 0.0}]
+					raw_text_parts = [plain]
 
-		except Exception as exc:
-			transcript_error = str(exc)
-			# Graceful degradation: store a placeholder turn so the call record is usable
-			turns = [{"role": "agent", "text": f"[Transcription unavailable: {exc}]", "ts_start": 0.0, "ts_end": 0.0}]
+			except Exception as exc:
+				transcript_error = str(exc)
+				# Graceful degradation: store a placeholder turn so the call record is usable
+				turns = [{"role": "agent", "text": f"[Transcription unavailable: {exc}]", "ts_start": 0.0, "ts_end": 0.0}]
+				raw_text_parts = [turns[0]["text"]]
+
+		if not turns:  # ASSEMBLYAI_API_KEY missing branch
+			turns = [{"role": "agent", "text": f"[{transcript_error}]", "ts_start": 0.0, "ts_end": 0.0}]
 			raw_text_parts = [turns[0]["text"]]
-
-	if not turns:  # ASSEMBLYAI_API_KEY missing branch
-		turns = [{"role": "agent", "text": f"[{transcript_error}]", "ts_start": 0.0, "ts_end": 0.0}]
-		raw_text_parts = [turns[0]["text"]]
+	finally:
+		# Clean up temp file if created
+		if temp_file_path and os.path.exists(temp_file_path):
+			os.remove(temp_file_path)
 
 	# Create Call record
 	call = Call(
@@ -235,7 +249,7 @@ async def upload_recording(
 		channel="upload",
 		status=CallStatus.processing,
 		started_at=datetime.datetime.utcnow(),
-		audio_path=audio_path,  # URL if Firebase enabled, local filename otherwise
+		audio_path=saved_name,
 	)
 	db.add(call)
 	await db.flush()
@@ -276,12 +290,22 @@ async def attach_call_audio(
 		raise HTTPException(404, "Call not found")
 
 	contents = await file.read()
-	os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 	ext = os.path.splitext(file.filename or "recording.webm")[1].lower() or ".webm"
 	saved_name = f"{uuid.uuid4()}{ext}"
-	saved_path = os.path.join(settings.UPLOAD_DIR, saved_name)
-	with open(saved_path, "wb") as fh:
-		fh.write(contents)
+	
+	# Upload to Supabase Storage if configured, otherwise to local storage
+	if settings.USE_SUPABASE_STORAGE and settings.SUPABASE_URL and settings.SUPABASE_API_KEY:
+		try:
+			await upload_audio_to_supabase(saved_name, contents)
+		except Exception as exc:
+			print(f"[transcripts] Supabase upload failed: {exc}")
+			raise HTTPException(500, f"Failed to upload file: {exc}")
+	else:
+		# Fallback to local storage
+		os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+		saved_path = os.path.join(settings.UPLOAD_DIR, saved_name)
+		with open(saved_path, "wb") as fh:
+			fh.write(contents)
 
 	call.audio_path = saved_name
 	await db.commit()

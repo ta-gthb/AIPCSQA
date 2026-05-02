@@ -145,10 +145,34 @@ app.include_router(live_monitor.router)
 app.include_router(simulation.router)
 
 # Serve uploaded recordings
-# Note: If Firebase Storage is enabled, audio files are stored as URLs
-# If Firebase is disabled, files are stored locally and served from here
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+# If Supabase is configured, serve audio via redirect endpoint
+# Otherwise, serve from local directory
+if not (settings.USE_SUPABASE_STORAGE and settings.SUPABASE_URL and settings.SUPABASE_API_KEY):
+	os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+	app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+
+@app.get("/audio/{file_name}")
+async def get_audio(file_name: str):
+	"""Get audio file from Supabase Storage or local storage."""
+	if settings.USE_SUPABASE_STORAGE and settings.SUPABASE_URL and settings.SUPABASE_API_KEY:
+		# Redirect to Supabase public URL
+		from services.storage import get_audio_url
+		try:
+			url = await get_audio_url(file_name)
+			return {"url": url, "source": "supabase"}
+		except Exception as exc:
+			raise HTTPException(404, f"Audio file not found: {exc}")
+	else:
+		# Serve from local storage
+		import mimetypes
+		file_path = os.path.join(settings.UPLOAD_DIR, file_name)
+		if not os.path.exists(file_path):
+			raise HTTPException(404, "Audio file not found")
+		if not os.path.isfile(file_path):
+			raise HTTPException(403, "Invalid file")
+		mime_type, _ = mimetypes.guess_type(file_path)
+		from fastapi.responses import FileResponse
+		return FileResponse(file_path, media_type=mime_type or "audio/mpeg")
 
 @app.get("/health")
 async def health():

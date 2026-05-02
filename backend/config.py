@@ -15,11 +15,11 @@ class Settings(BaseSettings):
 	SELF_PING_ENABLED: bool = True
 	SELF_PING_URL: str = ""
 	SELF_PING_INTERVAL_SECONDS: int = 60
-	# Firebase Storage
-	FIREBASE_ENABLED: bool = False
-	FIREBASE_PROJECT_ID: str = ""
-	FIREBASE_STORAGE_BUCKET: str = ""
-	FIREBASE_CREDENTIALS_JSON: str = ""  # Path to Firebase service account JSON key file
+	# Supabase Storage configuration for audio files
+	SUPABASE_URL: str = ""
+	SUPABASE_API_KEY: str = ""
+	SUPABASE_BUCKET: str = "audio-recordings"
+	USE_SUPABASE_STORAGE: bool = True
 
 	class Config:
 		env_file = ".env"
