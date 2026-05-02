@@ -53,7 +53,7 @@ function calculateSpeakingTime(turns, recordingDuration = null) {
   
   if (!turns || !Array.isArray(turns)) return { agentTime: 0, customerTime: 0, totalTime: recordingDuration || 0 };
   
-  // Calculate actual speaking durations from turns
+  // Calculate actual speaking durations from turns (backend ensures these are accurate)
   turns.forEach(turn => {
     const duration = Math.max(0, (turn.ts_end || 0) - (turn.ts_start || 0));
     if (turn.role === "agent") {
@@ -68,7 +68,9 @@ function calculateSpeakingTime(turns, recordingDuration = null) {
   customerTime = Math.round(customerTime * 10) / 10;
   
   // Use actual recording duration if provided and > 0, otherwise use sum of turns
-  const totalTime = (recordingDuration && recordingDuration > 0) ? recordingDuration : (agentTime + customerTime);
+  // Backend now ensures turn timestamps match recording duration, so this is fallback
+  const turnTotal = agentTime + customerTime;
+  const totalTime = (recordingDuration && recordingDuration > 0) ? recordingDuration : turnTotal;
   
   return { agentTime, customerTime, totalTime };
 }

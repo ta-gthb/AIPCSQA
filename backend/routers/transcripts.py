@@ -293,15 +293,26 @@ async def ingest_transcript(body: TranscriptIn, bg: BackgroundTasks,
 	
 	turns = [t.dict() for t in body.turns]
 	
-	# If turns don't have timestamps and we have recording duration, estimate them
-	if body.duration_sec > 0 and turns:
-		has_timestamps = any(t.get("ts_start") is not None or t.get("ts_end") is not None for t in turns)
-		if not has_timestamps:
-			# Estimate timestamps: distribute turns evenly across recording duration
+	# Validate and fix turn timestamps
+	if turns and body.duration_sec > 0:
+		# Calculate actual turn durations
+		turn_total = sum(max(0, (t.get("ts_end", 0) or 0) - (t.get("ts_start", 0) or 0)) for t in turns)
+		
+		# If turn durations are missing or too small compared to recording duration,
+		# recalculate with scale factor to match actual recording duration
+		if turn_total == 0 or turn_total < body.duration_sec * 0.5:
+			# Distribute turns evenly across the recording duration
 			time_per_turn = body.duration_sec / len(turns) if turns else 0
 			for i, turn in enumerate(turns):
-				turn["ts_start"] = i * time_per_turn
-				turn["ts_end"] = (i + 1) * time_per_turn
+				turn["ts_start"] = round(i * time_per_turn, 2)
+				turn["ts_end"] = round((i + 1) * time_per_turn, 2)
+		elif turn_total > 0 and turn_total != body.duration_sec:
+			# Scale timestamps proportionally to match recording duration
+			# This preserves the ratio of agent vs customer speaking time
+			scale_factor = body.duration_sec / turn_total
+			for turn in turns:
+				turn["ts_start"] = round((turn.get("ts_start", 0) or 0) * scale_factor, 2)
+				turn["ts_end"] = round((turn.get("ts_end", 0) or 0) * scale_factor, 2)
 	
 	transcript = Transcript(call_id=call.id, turns=turns,
 							raw_text="\n".join(f"{t['role']}: {t['text']}" for t in turns))
