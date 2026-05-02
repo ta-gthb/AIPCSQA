@@ -15,11 +15,6 @@ class Settings(BaseSettings):
 	SELF_PING_ENABLED: bool = True
 	SELF_PING_URL: str = ""
 	SELF_PING_INTERVAL_SECONDS: int = 60
-	# Supabase Storage configuration for audio files
-	SUPABASE_URL: str = ""
-	SUPABASE_API_KEY: str = ""
-	SUPABASE_BUCKET: str = "audio-recordings"
-	USE_SUPABASE_STORAGE: bool = True
 
 	class Config:
 		env_file = ".env"
