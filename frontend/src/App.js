@@ -53,6 +53,7 @@ function calculateSpeakingTime(turns, recordingDuration = null) {
   
   if (!turns || !Array.isArray(turns)) return { agentTime: 0, customerTime: 0, totalTime: recordingDuration || 0 };
   
+  // Calculate speaking durations from turns
   turns.forEach(turn => {
     const duration = (turn.ts_end || 0) - (turn.ts_start || 0);
     if (turn.role === "agent") {
@@ -62,8 +63,16 @@ function calculateSpeakingTime(turns, recordingDuration = null) {
     }
   });
   
-  // Use actual recording duration if provided, otherwise sum of turns
-  const totalTime = recordingDuration !== null ? recordingDuration : (agentTime + customerTime);
+  const calculatedTotal = agentTime + customerTime;
+  
+  // If we have actual recording duration, scale speaking times proportionally
+  if (recordingDuration !== null && calculatedTotal > 0) {
+    const scaleFactor = recordingDuration / calculatedTotal;
+    agentTime = agentTime * scaleFactor;
+    customerTime = customerTime * scaleFactor;
+  }
+  
+  const totalTime = recordingDuration !== null ? recordingDuration : calculatedTotal;
   
   return { agentTime, customerTime, totalTime };
 }
