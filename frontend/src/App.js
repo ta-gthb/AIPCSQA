@@ -47,11 +47,11 @@ function Bar({ value, max = 10, color }) {
   );
 }
 
-function calculateSpeakingTime(turns) {
+function calculateSpeakingTime(turns, recordingDuration = null) {
   let agentTime = 0;
   let customerTime = 0;
   
-  if (!turns || !Array.isArray(turns)) return { agentTime: 0, customerTime: 0, totalTime: 0 };
+  if (!turns || !Array.isArray(turns)) return { agentTime: 0, customerTime: 0, totalTime: recordingDuration || 0 };
   
   turns.forEach(turn => {
     const duration = (turn.ts_end || 0) - (turn.ts_start || 0);
@@ -62,7 +62,10 @@ function calculateSpeakingTime(turns) {
     }
   });
   
-  return { agentTime, customerTime, totalTime: agentTime + customerTime };
+  // Use actual recording duration if provided, otherwise sum of turns
+  const totalTime = recordingDuration !== null ? recordingDuration : (agentTime + customerTime);
+  
+  return { agentTime, customerTime, totalTime };
 }
 
 function WaveformAudioPlayer({ src, mimeType }) {
@@ -973,13 +976,16 @@ function SupervisorAudit() {
             <div style={{ padding: "14px 16px", borderBottom: `1px solid ${t.border}`, fontWeight: 700, fontSize: 14 }}>⏱️ Speaking Time</div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
               {detail?.transcript?.turns ? (() => {
-                const { agentTime, customerTime, totalTime } = calculateSpeakingTime(detail.transcript.turns);
+                const { agentTime, customerTime, totalTime } = calculateSpeakingTime(detail.transcript.turns, detail.call?.duration);
+                const silenceTime = Math.max(0, totalTime - agentTime - customerTime);
                 const pieData = [
                   { name: "Agent", value: Math.round(agentTime * 10) / 10, fill: t.amber },
-                  { name: "Customer", value: Math.round(customerTime * 10) / 10, fill: t.blue }
+                  { name: "Customer", value: Math.round(customerTime * 10) / 10, fill: t.blue },
+                  { name: "Silence", value: Math.round(silenceTime * 10) / 10, fill: t.border }
                 ];
                 const agentPct = totalTime > 0 ? Math.round((agentTime / totalTime) * 100) : 0;
                 const custPct = totalTime > 0 ? Math.round((customerTime / totalTime) * 100) : 0;
+                const silencePct = totalTime > 0 ? Math.round((silenceTime / totalTime) * 100) : 0;
                 
                 return (
                   <>
@@ -1002,9 +1008,15 @@ function SupervisorAudit() {
                           <div style={{ color: t.blue, fontWeight: 700 }}>👤 Customer</div>
                           <div style={{ color: t.muted }}>{custPct}% ({Math.round(customerTime)}s)</div>
                         </div>
+                        {silencePct > 0 && (
+                          <div>
+                            <div style={{ color: t.border, fontWeight: 700 }}>🔇 Silence</div>
+                            <div style={{ color: t.muted }}>{silencePct}% ({Math.round(silenceTime)}s)</div>
+                          </div>
+                        )}
                       </div>
                       <div style={{ marginTop: 10, padding: 10, background: t.surface, borderRadius: 6, fontSize: 11 }}>
-                        <div style={{ color: t.muted, marginBottom: 4 }}>Total Duration</div>
+                        <div style={{ color: t.muted, marginBottom: 4 }}>Total Recording Duration</div>
                         <div style={{ color: t.amber, fontWeight: 700, fontSize: 14 }}>{Math.round(totalTime)}s</div>
                       </div>
                     </div>
