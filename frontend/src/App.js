@@ -55,7 +55,7 @@ function calculateSpeakingTime(turns, recordingDuration = null) {
   
   // Calculate speaking durations from turns
   turns.forEach(turn => {
-    const duration = (turn.ts_end || 0) - (turn.ts_start || 0);
+    const duration = Math.max(0, (turn.ts_end || 0) - (turn.ts_start || 0));
     if (turn.role === "agent") {
       agentTime += duration;
     } else if (turn.role === "customer") {
@@ -63,18 +63,29 @@ function calculateSpeakingTime(turns, recordingDuration = null) {
     }
   });
   
-  const calculatedTotal = agentTime + customerTime;
-  
-  // If we have actual recording duration, scale speaking times proportionally
-  if (recordingDuration !== null && calculatedTotal > 0) {
-    const scaleFactor = recordingDuration / calculatedTotal;
-    agentTime = agentTime * scaleFactor;
-    customerTime = customerTime * scaleFactor;
+  // Use actual recording duration as the source of truth
+  if (recordingDuration !== null && recordingDuration > 0) {
+    const calculatedTotal = agentTime + customerTime;
+    
+    // If calculated total is close to recording duration (within 5%), use proportional scaling
+    if (calculatedTotal > 0 && calculatedTotal >= recordingDuration * 0.95) {
+      const scaleFactor = recordingDuration / calculatedTotal;
+      agentTime = Math.round(agentTime * scaleFactor * 10) / 10;
+      customerTime = Math.round(customerTime * scaleFactor * 10) / 10;
+    } else if (calculatedTotal > 0) {
+      // If calculated total is significantly less than recording duration,
+      // keep the ratio but distribute the difference
+      const ratio = agentTime / calculatedTotal;
+      agentTime = Math.round(recordingDuration * ratio * 10) / 10;
+      customerTime = Math.round(recordingDuration * (1 - ratio) * 10) / 10;
+    }
+    
+    const totalTime = recordingDuration;
+    return { agentTime, customerTime, totalTime };
   }
   
-  const totalTime = recordingDuration !== null ? recordingDuration : calculatedTotal;
-  
-  return { agentTime, customerTime, totalTime };
+  const totalTime = agentTime + customerTime;
+  return { agentTime: Math.round(agentTime * 10) / 10, customerTime: Math.round(customerTime * 10) / 10, totalTime: Math.round(totalTime * 10) / 10 };
 }
 
 function WaveformAudioPlayer({ src, mimeType }) {
