@@ -65,6 +65,20 @@ function calculateSpeakingTime(turns) {
   return { agentTime, customerTime, totalTime: agentTime + customerTime };
 }
 
+function getMimeType(filename) {
+  if (!filename) return "audio/mpeg";
+  const ext = filename.toLowerCase().split(".").pop();
+  const mimeTypes = {
+    mp3: "audio/mpeg",
+    wav: "audio/wav",
+    webm: "audio/webm",
+    ogg: "audio/ogg",
+    m4a: "audio/mp4",
+    aac: "audio/aac",
+  };
+  return mimeTypes[ext] || "audio/mpeg";
+}
+
 function WaveformAudioPlayer({ src, mimeType }) {
   const containerRef = useRef(null);
   const audioRef = useRef(null);
@@ -847,7 +861,7 @@ function SupervisorAudit() {
                 <WaveformAudioPlayer
                   key={detail.call.audio_filename}
                   src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/audio/${detail.call.audio_filename}`}
-                  mimeType={detail.call.audio_filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
+                  mimeType={getMimeType(detail.call.audio_filename)}
                 />
               </div>
             )}
