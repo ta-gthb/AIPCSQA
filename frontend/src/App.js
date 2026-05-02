@@ -53,7 +53,7 @@ function calculateSpeakingTime(turns, recordingDuration = null) {
   
   if (!turns || !Array.isArray(turns)) return { agentTime: 0, customerTime: 0, totalTime: recordingDuration || 0 };
   
-  // Calculate speaking durations from turns
+  // Calculate actual speaking durations from turns
   turns.forEach(turn => {
     const duration = Math.max(0, (turn.ts_end || 0) - (turn.ts_start || 0));
     if (turn.role === "agent") {
@@ -63,29 +63,14 @@ function calculateSpeakingTime(turns, recordingDuration = null) {
     }
   });
   
-  // Use actual recording duration as the source of truth
-  if (recordingDuration !== null && recordingDuration > 0) {
-    const calculatedTotal = agentTime + customerTime;
-    
-    // If calculated total is close to recording duration (within 5%), use proportional scaling
-    if (calculatedTotal > 0 && calculatedTotal >= recordingDuration * 0.95) {
-      const scaleFactor = recordingDuration / calculatedTotal;
-      agentTime = Math.round(agentTime * scaleFactor * 10) / 10;
-      customerTime = Math.round(customerTime * scaleFactor * 10) / 10;
-    } else if (calculatedTotal > 0) {
-      // If calculated total is significantly less than recording duration,
-      // keep the ratio but distribute the difference
-      const ratio = agentTime / calculatedTotal;
-      agentTime = Math.round(recordingDuration * ratio * 10) / 10;
-      customerTime = Math.round(recordingDuration * (1 - ratio) * 10) / 10;
-    }
-    
-    const totalTime = recordingDuration;
-    return { agentTime, customerTime, totalTime };
-  }
+  // Round to 1 decimal place
+  agentTime = Math.round(agentTime * 10) / 10;
+  customerTime = Math.round(customerTime * 10) / 10;
   
-  const totalTime = agentTime + customerTime;
-  return { agentTime: Math.round(agentTime * 10) / 10, customerTime: Math.round(customerTime * 10) / 10, totalTime: Math.round(totalTime * 10) / 10 };
+  // Use actual recording duration as the source of truth
+  const totalTime = recordingDuration !== null ? recordingDuration : (agentTime + customerTime);
+  
+  return { agentTime, customerTime, totalTime };
 }
 
 function WaveformAudioPlayer({ src, mimeType }) {
