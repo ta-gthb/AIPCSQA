@@ -846,7 +846,7 @@ function SupervisorAudit() {
                 <div style={{ fontSize: 11, color: t.muted, marginBottom: 6, fontWeight: 600 }}>AUDIO RECORDING</div>
                 <WaveformAudioPlayer
                   key={detail.call.audio_filename}
-                  src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/uploads/${detail.call.audio_filename}`}
+                  src={`${process.env.REACT_APP_API_URL || "http://localhost:8000"}/audio/${detail.call.audio_filename}`}
                   mimeType={detail.call.audio_filename.endsWith(".ogg") ? "audio/ogg" : "audio/webm"}
                 />
               </div>

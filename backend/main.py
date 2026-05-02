@@ -153,13 +153,18 @@ if not (settings.USE_SUPABASE_STORAGE and settings.SUPABASE_URL and settings.SUP
 
 @app.get("/audio/{file_name}")
 async def get_audio(file_name: str):
-	"""Get audio file from Supabase Storage or local storage."""
+	"""Get audio file from Supabase Storage or local storage.
+	
+	For Supabase: Returns redirect to public URL
+	For local: Returns the audio file directly
+	"""
 	if settings.USE_SUPABASE_STORAGE and settings.SUPABASE_URL and settings.SUPABASE_API_KEY:
 		# Redirect to Supabase public URL
 		from services.storage import get_audio_url
+		from fastapi.responses import RedirectResponse
 		try:
 			url = await get_audio_url(file_name)
-			return {"url": url, "source": "supabase"}
+			return RedirectResponse(url=url)
 		except Exception as exc:
 			raise HTTPException(404, f"Audio file not found: {exc}")
 	else:
