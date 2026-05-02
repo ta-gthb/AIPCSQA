@@ -114,15 +114,13 @@ async def change_password(
 	await db.commit()
 	return {"detail": "Password changed successfully"}
 
+@router.get("/ping")
+async def ping():
+	"""Health check endpoint for self-ping to keep backend active.
+	Simulates a sign-in action without requiring credentials."""
+	return {"status": "ok", "service": "AIPCSQA", "message": "Backend is active"}
+
 @router.get("/me")
 async def me(user: User = Depends(current_user)):
 	return {"id": str(user.id), "name": user.name, "email": user.email,
 			"role": user.role, "team": user.team}
-
-@router.post("/keep-alive")
-async def keep_alive():
-	"""Health check endpoint to keep backend active - no authentication required"""
-	from datetime import datetime
-	timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-	print(f"[keep-alive] ping received at {timestamp}")
-	return {"status": "ok", "message": "Backend is active"}

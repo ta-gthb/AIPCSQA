@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 	FRONTEND_URL: str = "http://localhost:3000"
 	SELF_PING_ENABLED: bool = True
 	SELF_PING_URL: str = ""
-	SELF_PING_INTERVAL_SECONDS: int = 2
+	SELF_PING_INTERVAL_SECONDS: int = 60
 
 	class Config:
 		env_file = ".env"

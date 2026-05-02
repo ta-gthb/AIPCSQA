@@ -23,22 +23,23 @@ _self_ping_task = None
 
 
 def _resolve_self_ping_url() -> str:
-	"""Resolve self-ping URL from explicit setting or Render hostname."""
+	"""Resolve self-ping URL from explicit setting or Render hostname.
+	Pings /auth/ping endpoint which simulates sign-in without credentials."""
 	if settings.SELF_PING_URL:
 		base = settings.SELF_PING_URL.strip().rstrip("/")
-		return base if base.endswith("/health") else f"{base}/health"
+		return base if base.endswith("/auth/ping") else f"{base}/auth/ping"
 
 	render_external = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
 	if render_external:
 		if render_external.startswith("http://") or render_external.startswith("https://"):
-			return f"{render_external}/health"
-		return f"https://{render_external}/health"
+			return f"{render_external}/auth/ping"
+		return f"https://{render_external}/auth/ping"
 
 	render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip().rstrip("/")
 	if render_host:
 		if render_host.startswith("http://") or render_host.startswith("https://"):
-			return f"{render_host}/health"
-		return f"https://{render_host}/health"
+			return f"{render_host}/auth/ping"
+		return f"https://{render_host}/auth/ping"
 
 	return ""
 
@@ -52,13 +53,16 @@ def _should_enable_self_ping() -> bool:
 
 
 async def _self_ping_worker(url: str, interval_seconds: int):
-	"""Periodically ping this service to keep it warm on hosts that allow it."""
+	"""Periodically ping /auth/ping endpoint to keep backend alive.
+	Simulates user sign-in action without requiring credentials."""
 	client = httpx.AsyncClient(timeout=10.0, follow_redirects=True)
 	try:
 		while True:
 			try:
 				res = await client.get(url)
-				if res.status_code >= 400:
+				if res.status_code == 200:
+					print(f"[self-ping] {res.status_code} - Backend kept active")
+				elif res.status_code >= 400:
 					print(f"[self-ping] non-2xx status: {res.status_code}")
 			except Exception as exc:
 				print(f"[self-ping] failed: {exc}")
